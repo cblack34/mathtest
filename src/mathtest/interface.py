@@ -1,48 +1,40 @@
-from typing import Protocol, runtime_checkable
+"""Core interfaces for Mathtest plugins and output generators."""
+
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable
+
 from pydantic import BaseModel
 
+
 class Problem(BaseModel):
+    """Representation of a single math problem."""
+
     svg: str
-    data: dict[str, any]  # e.g., {"operands": [5, 3], "operator": "+", "answer": 8}
+    data: dict[str, Any]
+
 
 @runtime_checkable
 class MathProblemPlugin(Protocol):
-    """
-    Note on instantiation: Plugins may optionally accept a params dict in __init__ for configuration.
-    The coordinator will attempt to pass merged params during instantiation if provided; otherwise, use no-args init.
-    """
+    """Protocol describing math problem plugins."""
 
-    @property
-    def name(self) -> str:
-        """Unique name of the plugin, e.g., 'addition'."""
-        ...
+    name: str
 
     @classmethod
-    def get_parameters(cls) -> list[tuple[str, any, str]]:
-        """
-        Return list of (param_name, default_value, help_text) for this plugin.
-        e.g., [('max-operand', 10, 'Maximum operand value')]
-        """
-        ...
+    def get_parameters(cls) -> list[tuple[str, Any, str]]:
+        """Return parameter definitions for CLI/YAML generation."""
 
     def generate_problem(self) -> Problem:
-        """
-        Generate the problem randomly using the initialized configuration (if any).
-        """
-
-        ...
+        """Produce a problem using the plugin's configuration."""
 
     @classmethod
-    def generate_from_data(cls, data: dict[str, any]) -> Problem:
-        """
-        Generate the problem deterministically from a provided data dict (e.g., from JSON input).
-        """
-        ...
+    def generate_from_data(cls, data: dict[str, Any]) -> Problem:
+        """Construct a problem from deterministic input data."""
+
 
 @runtime_checkable
 class OutputGenerator(Protocol):
-    def generate(self, problems: list[Problem], params: dict[str, any]) -> None:
-        """
-        Produce output (e.g., PDF) from problems and layout params.
-        """
-        ...
+    """Protocol describing output generators such as PDF writers."""
+
+    def generate(self, problems: list[Problem], params: dict[str, Any]) -> None:
+        """Create an artifact from problems using provided parameters."""
