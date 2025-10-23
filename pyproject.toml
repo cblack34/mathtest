@@ -19,6 +19,10 @@ dependencies = [
 [project.scripts]
 mathtest = "mathtest:main"
 
+[project.entry-points."mathtest.plugins"]
+addition = "mathtest.plugins.addition:AdditionPlugin"
+subtraction = "mathtest.plugins.subtraction:SubtractionPlugin"
+
 [build-system]
 requires = ["uv_build>=0.8.6,<0.9.0"]
 build-backend = "uv_build"
