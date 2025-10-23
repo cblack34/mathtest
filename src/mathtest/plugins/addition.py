@@ -12,7 +12,16 @@ from ..interface import ParameterDefinition, Problem
 
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Convert CLI/YAML style keys (``max-operand``) to model field names."""
+    """Map external configuration keys to Pydantic field names.
+
+    Args:
+        params: Raw configuration dictionary that may contain hyphenated keys
+            from CLI flags or YAML settings.
+
+    Returns:
+        A dictionary with hyphenated keys converted to snake_case so they align
+        with the ``_AdditionParams`` model definition.
+    """
 
     normalized: dict[str, Any] = {}
     for key, value in (params or {}).items():
@@ -21,13 +30,32 @@ def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def _format_operand(value: int) -> str:
-    """Format an operand for display, wrapping negatives in parentheses."""
+    """Format an operand for vertical rendering.
+
+    Args:
+        value: The integer operand to render.
+
+    Returns:
+        The operand rendered as a string with negatives wrapped in parentheses
+        to match grade-school formatting expectations.
+    """
 
     return f"({value})" if value < 0 else str(value)
 
 
 def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
-    """Create a vertically stacked arithmetic SVG using ``svgwrite`` (SDD §3.2.3)."""
+    """Create a vertically stacked arithmetic SVG illustration.
+
+    Args:
+        top: The top operand shown in the vertical layout.
+        bottom: The bottom operand shown beneath the operator.
+        operator: The arithmetic operator symbol to display between operands.
+
+    Returns:
+        An SVG string matching the dimensions and typography outlined in
+        ``SDD §3.2.3`` so that addition and subtraction plugins remain visually
+        consistent.
+    """
 
     width = 140
     height = 90
@@ -72,7 +100,7 @@ def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
 
 
 class _AdditionParams(BaseModel):
-    """Pydantic validation for random generation parameters."""
+    """Validated configuration for randomly generated addition problems."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -135,7 +163,17 @@ class AdditionPlugin:
     """Generate vertically stacked addition problems (SDD §3.2.3, MVP Phase 2)."""
 
     def __init__(self, params: Mapping[str, Any] | None = None) -> None:
-        """Validate optional configuration and prepare the RNG (MVP Phase 2 task)."""
+        """Validate optional configuration and prepare the RNG.
+
+        Args:
+            params: Optional dictionary of CLI/YAML parameters supplied by the
+                coordinator. Keys may be hyphenated and are normalized before
+                validation.
+
+        Raises:
+            ValueError: If ``params`` fails validation against
+                ``_AdditionParams``.
+        """
 
         try:
             self._config = _AdditionParams.model_validate(_normalize_param_keys(params))
@@ -154,7 +192,12 @@ class AdditionPlugin:
 
     @classmethod
     def get_parameters(cls) -> list[ParameterDefinition]:
-        """Expose CLI/YAML parameter metadata (PRD §3.3)."""
+        """Describe parameters exposed through the CLI and YAML integrations.
+
+        Returns:
+            Metadata describing each supported configuration option so that the
+            coordinator can surface helpful descriptions to end users.
+        """
 
         return [
             ParameterDefinition(
@@ -175,7 +218,12 @@ class AdditionPlugin:
         ]
 
     def generate_problem(self) -> Problem:
-        """Create a random addition problem honoring the configured bounds."""
+        """Create a random addition problem honoring the configured bounds.
+
+        Returns:
+            A :class:`Problem` containing the SVG representation and the JSON
+            payload required for deterministic regeneration.
+        """
 
         augend = self._random.randint(self._config.min_operand, self._config.max_operand)
         addend = self._random.randint(self._config.min_operand, self._config.max_operand)
@@ -191,7 +239,19 @@ class AdditionPlugin:
 
     @classmethod
     def generate_from_data(cls, data: Mapping[str, Any]) -> Problem:
-        """Recreate an addition problem deterministically from serialized data."""
+        """Recreate an addition problem deterministically from serialized data.
+
+        Args:
+            data: The JSON payload previously emitted by :meth:`generate_problem`
+                or stored within the worksheet export.
+
+        Returns:
+            A :class:`Problem` with SVG markup and validated payload suitable for
+            downstream rendering.
+
+        Raises:
+            ValueError: If ``data`` cannot be validated by ``_AdditionData``.
+        """
 
         try:
             validated = _AdditionData.model_validate(dict(data))

@@ -12,7 +12,16 @@ from ..interface import ParameterDefinition, Problem
 
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Convert CLI/YAML parameter names into valid Pydantic field names."""
+    """Map external configuration keys to Pydantic field names.
+
+    Args:
+        params: Raw configuration dictionary that may contain hyphenated keys
+            sourced from CLI flags or YAML configuration files.
+
+    Returns:
+        A dictionary containing only snake_case keys so that
+        ``_SubtractionParams`` can validate the input.
+    """
 
     normalized: dict[str, Any] = {}
     for key, value in (params or {}).items():
@@ -21,13 +30,31 @@ def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
 
 
 def _format_operand(value: int) -> str:
-    """Render operands with parentheses when negative for readability."""
+    """Render operands with parentheses when negative for readability.
+
+    Args:
+        value: The operand to render in the vertical layout.
+
+    Returns:
+        The operand converted to a string with negative values wrapped in
+        parentheses to preserve alignment and clarity.
+    """
 
     return f"({value})" if value < 0 else str(value)
 
 
 def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
-    """Create a vertically stacked subtraction SVG (SDD §3.2.3)."""
+    """Create a vertically stacked subtraction SVG (SDD §3.2.3).
+
+    Args:
+        top: The top operand shown in the rendered SVG.
+        bottom: The bottom operand displayed beneath the operator.
+        operator: The arithmetic symbol used to label the operation.
+
+    Returns:
+        An SVG string that follows the shared layout specifications so worksheets
+        have consistent typography and spacing across plugins.
+    """
 
     width = 140
     height = 90
@@ -72,7 +99,7 @@ def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
 
 
 class _SubtractionParams(BaseModel):
-    """Pydantic validation for subtraction generation parameters."""
+    """Validated configuration for randomly generated subtraction problems."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -138,7 +165,16 @@ class SubtractionPlugin:
     """Generate vertically stacked subtraction problems (SDD §3.2.3, MVP Phase 2)."""
 
     def __init__(self, params: Mapping[str, Any] | None = None) -> None:
-        """Validate optional configuration and set up deterministic random support."""
+        """Validate optional configuration and set up deterministic random support.
+
+        Args:
+            params: Optional dictionary of CLI/YAML parameters supplied by the
+                coordinator. Hyphenated keys are normalized before validation.
+
+        Raises:
+            ValueError: If ``params`` fails validation against
+                ``_SubtractionParams``.
+        """
 
         try:
             self._config = _SubtractionParams.model_validate(
@@ -159,7 +195,12 @@ class SubtractionPlugin:
 
     @classmethod
     def get_parameters(cls) -> list[ParameterDefinition]:
-        """Expose CLI/YAML parameter metadata for subtraction (PRD §3.3)."""
+        """Describe parameters exposed through the CLI and YAML integrations.
+
+        Returns:
+            Metadata describing each subtraction-specific option so the
+            coordinator can render informative help text.
+        """
 
         return [
             ParameterDefinition(
@@ -185,7 +226,12 @@ class SubtractionPlugin:
         ]
 
     def generate_problem(self) -> Problem:
-        """Create a random subtraction problem according to configured bounds."""
+        """Create a random subtraction problem according to configured bounds.
+
+        Returns:
+            A :class:`Problem` containing the rendered SVG and JSON payload for
+            deterministic regeneration.
+        """
 
         minuend = self._random.randint(self._config.min_operand, self._config.max_operand)
         subtrahend = self._random.randint(
@@ -207,7 +253,18 @@ class SubtractionPlugin:
 
     @classmethod
     def generate_from_data(cls, data: Mapping[str, Any]) -> Problem:
-        """Recreate a subtraction problem deterministically from serialized data."""
+        """Recreate a subtraction problem deterministically from serialized data.
+
+        Args:
+            data: The JSON payload previously emitted by :meth:`generate_problem`
+                or stored alongside worksheet exports.
+
+        Returns:
+            A :class:`Problem` containing SVG markup and the validated payload.
+
+        Raises:
+            ValueError: If ``data`` cannot be validated by ``_SubtractionData``.
+        """
 
         try:
             validated = _SubtractionData.model_validate(dict(data))
