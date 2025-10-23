@@ -198,10 +198,7 @@ class AdditionPlugin:
         except ValidationError as exc:  # pragma: no cover - defensive rewrap
             raise ValueError("Invalid addition problem data") from exc
 
-        svg = _render_vertical_problem(validated.operands[0], validated.operands[1], "+")
-        payload = {
-            "operands": list(validated.operands),
-            "operator": validated.operator,
-            "answer": validated.answer,
-        }
+        top, bottom = validated.operands
+        svg = _render_vertical_problem(top, bottom, "+")
+        payload = validated.model_dump()
         return Problem(svg=svg, data=payload)

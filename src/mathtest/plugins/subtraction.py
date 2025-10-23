@@ -214,12 +214,7 @@ class SubtractionPlugin:
         except ValidationError as exc:  # pragma: no cover - defensive rewrap
             raise ValueError("Invalid subtraction problem data") from exc
 
-        svg = _render_vertical_problem(
-            validated.operands[0], validated.operands[1], "-"
-        )
-        payload = {
-            "operands": list(validated.operands),
-            "operator": validated.operator,
-            "answer": validated.answer,
-        }
+        minuend, subtrahend = validated.operands
+        svg = _render_vertical_problem(minuend, subtrahend, "-")
+        payload = validated.model_dump()
         return Problem(svg=svg, data=payload)
