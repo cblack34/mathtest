@@ -78,7 +78,7 @@ def _render_vertical_problem(
     bottom_operand = _format_operand(bottom)
     operator_prefix_chars = len(f"{operator} ")
 
-    min_char_target = max(minimum_digit_chars or 0, 0)
+    min_char_target = minimum_digit_chars or 0
     max_operand_chars = max(len(top_text), len(bottom_operand), min_char_target)
     digit_span = max_operand_chars * char_width
     left_padding = margin + operator_prefix_chars * char_width
