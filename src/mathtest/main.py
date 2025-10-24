@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -165,7 +166,7 @@ def _build_plugin_requests(params: dict[str, Any]) -> list[PluginRequest]:
 
     requests: list[PluginRequest] = []
     for plugin_name in _PLUGIN_PARAMETERS:
-        quantity = int(params.get(plugin_name, 0) or 0)
+        quantity = int(params.get(plugin_name, 0))
         requests.append(PluginRequest(name=plugin_name, quantity=quantity))
     return requests
 
@@ -239,13 +240,40 @@ def _plugin_generate_options() -> list[click.Option]:
             options.append(
                 click.Option(
                     [f"--{plugin_name}-{definition.name}"],
-                    type=str,
+                    type=_click_type_for(definition),
                     default=None,
                     metavar="VALUE",
-                    help=f"Override for {plugin_name} parameter '{definition.name}': {definition.description}",
+                    help=(
+                        f"Override for {plugin_name} parameter '{definition.name}': "
+                        f"{definition.description}"
+                    ),
                 )
             )
     return options
+
+
+def _click_type_for(definition: ParameterDefinition) -> click.ParamType | type[Any]:
+    """Resolve the Click type for ``definition`` based on its declared type."""
+
+    declared = definition.type
+    if declared is None:
+        return str
+    if isinstance(declared, str):
+        alias = declared.lower()
+        if alias == "int":
+            return int
+        if alias == "float":
+            return float
+        if alias == "bool":
+            return click.BOOL
+        if alias == "str":
+            return str
+        return str
+    if declared is bool:
+        return click.BOOL
+    if declared in {int, float, str}:
+        return declared
+    return str
 
 
 class _GenerateCommand(TyperCommand):
@@ -316,8 +344,18 @@ def _generate_entrypoint(**kwargs) -> None:
 
 
 # Register the command with Typer using the custom Click command class.
+_GENERATE_HELP = (
+    inspect.cleandoc(generate.__doc__ or "").splitlines()[0]
+    if generate.__doc__
+    else ""
+)
 app.registered_commands.append(
-    CommandInfo(name="generate", cls=_GenerateCommand, callback=_generate_entrypoint, help="Generate a printable worksheet using installed plugins."),
+    CommandInfo(
+        name="generate",
+        cls=_GenerateCommand,
+        callback=_generate_entrypoint,
+        help=_GENERATE_HELP,
+    ),
 )
 
 
