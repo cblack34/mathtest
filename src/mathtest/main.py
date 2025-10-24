@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import random
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -168,19 +169,46 @@ def _build_cli_parameter_set(params: dict[str, Any]) -> ParameterSet:
     return ParameterSet(common={}, plugins=plugin_overrides)
 
 
-def _build_plugin_requests(params: dict[str, Any]) -> list[PluginRequest]:
-    """Create plugin generation requests derived from CLI counts.
+def _build_plugin_requests(
+    params: dict[str, Any], total_problems: int, rng: random.Random | None = None
+) -> list[PluginRequest]:
+    """Create plugin generation requests derived from CLI flag selections.
 
     Args:
         params: Dictionary of CLI parameter values reported by Typer.
+        total_problems: Total number of problems requested across all plugins.
+        rng: Optional random number generator used for allocation.
 
     Returns:
         Requested quantities for each registered plugin (zero when omitted).
     """
 
+    rng = rng or random.Random()
+    selected_plugins = [
+        plugin_name
+        for plugin_name in _PLUGIN_PARAMETERS
+        if params.get(plugin_name, False)
+    ]
+
+    allocations: dict[str, int] = {name: 0 for name in selected_plugins}
+    remaining = total_problems if selected_plugins else 0
+
+    if selected_plugins and remaining > 0:
+        shuffled = selected_plugins.copy()
+        rng.shuffle(shuffled)
+        initial_allocation = min(remaining, len(selected_plugins))
+        for name in shuffled[:initial_allocation]:
+            allocations[name] += 1
+        remaining -= initial_allocation
+
+        while remaining > 0:
+            name = rng.choice(selected_plugins)
+            allocations[name] += 1
+            remaining -= 1
+
     requests: list[PluginRequest] = []
     for plugin_name in _PLUGIN_PARAMETERS:
-        quantity = params.get(plugin_name, 0)
+        quantity = allocations.get(plugin_name, 0)
         requests.append(PluginRequest(name=plugin_name, quantity=quantity))
     return requests
 
@@ -237,6 +265,13 @@ def _static_generate_options() -> list[click.Option]:
             show_default=True,
             help="Title displayed at the top of the worksheet.",
         ),
+        click.Option(
+            ["--total-problems", "--total-problems-per-test"],
+            type=click.IntRange(min=1),
+            default=10,
+            show_default=True,
+            help="Total number of problems generated across selected plugins.",
+        ),
     ]
 
 
@@ -248,10 +283,9 @@ def _plugin_generate_options() -> list[click.Option]:
         options.append(
             click.Option(
                 [f"--{plugin_name}"],
-                type=int,
-                default=0,
-                show_default=True,
-                help=f"Number of {plugin_name} problems to generate.",
+                is_flag=True,
+                default=False,
+                help=f"Include {plugin_name} problems in the worksheet.",
             )
         )
         for definition in definitions:
@@ -298,6 +332,7 @@ def generate(
     json_output: Path | None,
     output: Path,
     title: str,
+    total_problems: int,
     **plugin_options: Any,
 ) -> None:
     """Generate a math worksheet PDF using registered plugins.
@@ -308,7 +343,8 @@ def generate(
         json_output: Optional path for writing the JSON serialization output.
         output: Destination PDF path for the generated worksheet.
         title: Worksheet title rendered at the top of the PDF.
-        **plugin_options: Plugin-specific quantities and parameter overrides.
+        total_problems: Number of problems distributed across selected plugins.
+        **plugin_options: Plugin-specific flags and parameter overrides.
 
     Raises:
         typer.BadParameter: If the supplied CLI arguments cannot be processed.
@@ -316,14 +352,18 @@ def generate(
 
     yaml_parameters = _load_parameter_set(config)
     cli_parameters = _build_cli_parameter_set(plugin_options)
-    plugin_requests = _build_plugin_requests(plugin_options)
+    plugin_requests = _build_plugin_requests(plugin_options, total_problems)
     json_entries = _load_json_input(json_input) if json_input else None
 
-    if json_entries is None and not any(
-        request.quantity > 0 for request in plugin_requests
-    ):
+    selected_plugins = [
+        plugin_name
+        for plugin_name in _PLUGIN_PARAMETERS
+        if plugin_options.get(plugin_name, False)
+    ]
+
+    if json_entries is None and not selected_plugins:
         raise typer.BadParameter(
-            "Specify at least one plugin quantity or provide --json-input.",
+            "Select at least one plugin flag or provide --json-input.",
             param_hint="--addition/--subtraction or --json-input",
         )
 
