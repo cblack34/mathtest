@@ -300,15 +300,29 @@ class PdfOutputGenerator(OutputGenerator):
         canvas.setFont(config.body_font, label_font_size)
         label_padding = label_font_size * 0.5
         underline_offset = label_font_size * 0.3
-        available_right = page_width - config.margin
 
-        for label in ("Name:", "Date:"):
-            canvas.drawString(config.margin, next_y, label)
+        content_width = max(page_width - (2 * config.margin), 0.0)
+        name_field_width = content_width * 0.5
+        date_field_width = content_width * 0.35
+        gap_width = max(content_width - name_field_width - date_field_width, 0.0)
+
+        name_x = config.margin
+        date_x = name_x + name_field_width + gap_width
+        line_y = next_y - underline_offset
+
+        def draw_field(label: str, field_x: float, field_width: float) -> None:
+            canvas.drawString(field_x, next_y, label)
             label_width = canvas.stringWidth(label, config.body_font, label_font_size)
-            line_start = config.margin + label_width + label_padding
-            line_y = next_y - underline_offset
-            canvas.line(line_start, line_y, available_right, line_y)
-            next_y -= label_font_size * 1.4
+            line_start = field_x + label_width + label_padding
+            line_end = field_x + field_width
+            line_start = min(line_start, line_end)
+            if line_end > line_start:
+                canvas.line(line_start, line_y, line_end, line_y)
+
+        draw_field("Name:", name_x, name_field_width)
+        draw_field("Date:", date_x, date_field_width)
+
+        next_y -= label_font_size * 1.6
 
         return next_y
 
