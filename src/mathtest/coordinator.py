@@ -9,6 +9,7 @@ a consistent orchestration layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import random
 from typing import Any, Mapping
 
@@ -213,6 +214,8 @@ class Coordinator:
         serialized: list[SerializedProblem] = []
         plugin_instances: dict[str, Any] = {}
         generation_plan: list[str] = []
+        shuffle_components: list[str] = []
+        deterministic_shuffle = True
 
         for plugin_request in request.plugin_requests:
             if plugin_request.quantity <= 0:
@@ -229,11 +232,24 @@ class Coordinator:
 
             plugin_instances[plugin_request.name] = plugin
             generation_plan.extend([plugin_request.name] * plugin_request.quantity)
+            seed_value = self._extract_random_seed(params)
+            if seed_value is None:
+                deterministic_shuffle = False
+            else:
+                shuffle_components.append(
+                    f"{plugin_request.name}:{seed_value}"
+                )
 
         if not generation_plan:
             return GenerationResult(problems=problems, serialized=serialized)
 
-        random.shuffle(generation_plan)
+        if deterministic_shuffle and shuffle_components:
+            shuffle_seed = self._derive_shuffle_seed(
+                shuffle_components, generation_plan
+            )
+            random.Random(shuffle_seed).shuffle(generation_plan)
+        else:
+            random.shuffle(generation_plan)
 
         for plugin_name in generation_plan:
             plugin = plugin_instances[plugin_name]
@@ -287,3 +303,27 @@ class Coordinator:
         plugin_specific = parameter_set.plugins.get(plugin_name)
         if plugin_specific:
             target.update(plugin_specific)
+
+    @staticmethod
+    def _extract_random_seed(params: Mapping[str, Any]) -> int | None:
+        """Return a normalized random seed from ``params`` when present."""
+
+        for key in ("random_seed", "random-seed"):
+            value = params.get(key)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @staticmethod
+    def _derive_shuffle_seed(
+        components: list[str], plan: list[str]
+    ) -> int:
+        """Create a deterministic shuffle seed from plugin seeds and plan."""
+
+        material = "|".join(components + plan)
+        digest = hashlib.sha256(material.encode("utf-8")).digest()
+        return int.from_bytes(digest, "big")

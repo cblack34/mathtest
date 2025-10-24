@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
-import random
 from pathlib import Path
 
 from click.testing import Result
 from typer.testing import CliRunner
 
+from mathtest.coordinator import (
+    Coordinator,
+    GenerationRequest,
+    ParameterSet,
+    PluginRequest,
+)
 from mathtest.main import _normalize_argv, app
 
 
@@ -119,31 +124,53 @@ def test_cli_mixed_plugins_are_interleaved(tmp_path: Path) -> None:
     """Runs with multiple plugins should interleave problem types."""
 
     runner = CliRunner()
-    random.seed(0)
+    args = [
+        "--addition",
+        "--subtraction",
+        "--addition-random-seed",
+        "1",
+        "--subtraction-random-seed",
+        "1",
+    ]
 
-    json_path = tmp_path / "mixed.json"
-    result = _invoke(
+    first_path = tmp_path / "mixed.json"
+    first_result = _invoke(
         runner,
         [
-            "--addition",
-            "--subtraction",
-            "--addition-random-seed",
-            "1",
-            "--subtraction-random-seed",
-            "1",
+            *args,
             "--json-output",
-            str(json_path),
+            str(first_path),
         ],
     )
+    assert first_result.exit_code == 0, first_result.output
 
-    assert result.exit_code == 0, result.output
+    first_serialized = json.loads(first_path.read_text(encoding="utf-8"))
 
-    serialized = json.loads(json_path.read_text(encoding="utf-8"))
-    types = [entry["type"] for entry in serialized]
+    first_types = [entry["type"] for entry in first_serialized]
+    assert len(first_types) == 10
+    assert "addition" in first_types and "subtraction" in first_types
+    assert any(left != right for left, right in zip(first_types, first_types[1:]))
 
-    assert len(types) == 10
-    assert "addition" in types and "subtraction" in types
-    assert any(left != right for left, right in zip(types, types[1:]))
+    manual_request = GenerationRequest(
+        plugin_requests=[
+            PluginRequest(name="addition", quantity=5),
+            PluginRequest(name="subtraction", quantity=5),
+        ],
+        cli_parameters=ParameterSet(
+            plugins={
+                "addition": {"random-seed": 3},
+                "subtraction": {"random-seed": 3},
+            }
+        ),
+    )
+
+    manual_first = Coordinator().generate(manual_request)
+    manual_second = Coordinator().generate(manual_request)
+
+    manual_types_first = [entry.problem_type for entry in manual_first.serialized]
+    manual_types_second = [entry.problem_type for entry in manual_second.serialized]
+
+    assert manual_types_first == manual_types_second
 
 
 def test_cli_inserts_generate_prefix_for_flags(tmp_path: Path) -> None:
