@@ -270,7 +270,7 @@ def _static_generate_options() -> list[click.Option]:
             help="Title displayed at the top of the worksheet.",
         ),
         click.Option(
-            ["--total-problems", "--total-problem-per-tests"],
+            ["--total-problems", "--total-problems-per-test"],
             type=click.IntRange(min=1),
             default=10,
             show_default=True,
