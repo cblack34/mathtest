@@ -267,6 +267,12 @@ def _static_generate_options() -> list[click.Option]:
             help="Title displayed at the top of the worksheet.",
         ),
         click.Option(
+            ["--answer-key/--no-answer-key"],
+            default=False,
+            show_default=True,
+            help="Include the answer key section in the generated PDF.",
+        ),
+        click.Option(
             ["--total-problems", "--total-problems-per-test"],
             type=click.IntRange(min=1),
             default=10,
@@ -333,6 +339,7 @@ def generate(
     json_output: Path | None,
     output: Path,
     title: str,
+    answer_key: bool,
     total_problems: int,
     **plugin_options: Any,
 ) -> None:
@@ -344,6 +351,7 @@ def generate(
         json_output: Optional path for writing the JSON serialization output.
         output: Destination PDF path for the generated worksheet.
         title: Worksheet title rendered at the top of the PDF.
+        answer_key: Whether to include the answer key section in the PDF.
         total_problems: Number of problems distributed across selected plugins.
         **plugin_options: Plugin-specific flags and parameter overrides.
 
@@ -378,7 +386,12 @@ def generate(
     coordinator = Coordinator(registry=_REGISTRY)
     result = coordinator.generate(request)
 
-    PdfOutputGenerator().generate(result.problems, {"path": output, "title": title})
+    pdf_params = {
+        "path": output,
+        "title": title,
+        "include_answers": answer_key,
+    }
+    PdfOutputGenerator().generate(result.problems, pdf_params)
 
     if json_output is not None:
         _write_json_output(json_output, result.json_ready())

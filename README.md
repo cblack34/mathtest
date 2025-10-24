@@ -40,8 +40,10 @@ uv run mathtest generate \
 ```
 
 Additional configuration, such as operand ranges or RNG seeds, is surfaced via
-plugin-specific flags (for example `--addition-min-operand`). You can also pass
-a YAML configuration file with `--config path/to/settings.yaml`.
+plugin-specific flags (for example `--addition-min-operand`). Use `--answer-key`
+to render the answer key section—it's disabled by default so worksheets can be
+handed directly to students. You can also pass a YAML configuration file with
+`--config path/to/settings.yaml`.
 
 ### PDF layout configuration
 
@@ -53,7 +55,8 @@ outer margins and vertical spacing. Two new parameters extend the layout model:
 - `column_spacing_inches` sets the gutter between columns (default: 0.25).
 
 These values mirror the fields on `PdfOutputParams` and apply uniformly across
-the generated worksheet and answer key pages.
+the generated worksheet and, when `include_answers` is enabled, the answer key
+pages.
 
 ## Development
 
