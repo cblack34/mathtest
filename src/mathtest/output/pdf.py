@@ -23,6 +23,13 @@ from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 from ..interface import OutputGenerator, Problem
 
+MIN_HEADER_LABEL_FONT_SIZE = 10.0
+HEADER_LABEL_PADDING_FACTOR = 0.5
+HEADER_UNDERLINE_OFFSET_FACTOR = 0.3
+NAME_FIELD_WIDTH_RATIO = 0.5
+DATE_FIELD_WIDTH_RATIO = 0.35
+HEADER_SPACING_MULTIPLIER = 1.6
+
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return ``params`` with CLI-friendly keys normalized to snake_case."""
@@ -121,6 +128,13 @@ class PdfOutputParams(BaseModel):
     body_font: str = Field(
         default="Helvetica",
         description="Base font used for ancillary text such as titles and answers.",
+    )
+    include_student_header: bool = Field(
+        default=True,
+        description=(
+            "Whether the worksheet should include student metadata fields such as "
+            "name and date beneath the main title."
+        ),
     )
     title_font_size: int = Field(
         default=20,
@@ -284,7 +298,43 @@ class PdfOutputGenerator(OutputGenerator):
 
         canvas.setFont(config.body_font, config.title_font_size)
         canvas.drawCentredString(page_width / 2, current_y, config.title)
-        return current_y - (config.title_font_size * 1.5)
+        next_y = current_y - (config.title_font_size * 1.5)
+
+        if not config.include_student_header:
+            return next_y
+
+        label_font_size = max(float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE)
+        canvas.setFont(config.body_font, label_font_size)
+        label_padding = label_font_size * HEADER_LABEL_PADDING_FACTOR
+        underline_offset = label_font_size * HEADER_UNDERLINE_OFFSET_FACTOR
+
+        content_width = max(page_width - (2 * config.margin), 0.0)
+        name_field_width = content_width * NAME_FIELD_WIDTH_RATIO
+        date_field_width = content_width * DATE_FIELD_WIDTH_RATIO
+        gap_width = max(content_width - name_field_width - date_field_width, 0.0)
+
+        name_x = config.margin
+        date_x = name_x + name_field_width + gap_width
+        line_y = next_y - underline_offset
+
+        # ``draw_field`` relies on variables from the outer scope for layout and font
+        # configuration: ``next_y``, ``line_y``, ``label_font_size``,
+        # ``config.body_font``, and ``canvas``.
+        def draw_field(label: str, field_x: float, field_width: float) -> None:
+            canvas.drawString(field_x, next_y, label)
+            label_width = canvas.stringWidth(label, config.body_font, label_font_size)
+            line_start = field_x + label_width + label_padding
+            line_end = field_x + field_width
+            line_start = min(line_start, line_end)
+            if line_end > line_start:
+                canvas.line(line_start, line_y, line_end, line_y)
+
+        draw_field("Name:", name_x, name_field_width)
+        draw_field("Date:", date_x, date_field_width)
+
+        next_y -= label_font_size * HEADER_SPACING_MULTIPLIER
+
+        return next_y
 
     def _draw_answers(
         self,
@@ -417,3 +467,4 @@ class PdfOutputGenerator(OutputGenerator):
             x_offset + (x2 * scale),
             drawing_bottom + ((geometry.height - y2) * scale),
         )
+
