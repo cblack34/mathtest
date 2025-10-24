@@ -11,9 +11,9 @@ from mathtest.plugins.subtraction import SubtractionPlugin
 
 # Layout multipliers mirror the constants in the addition/subtraction renderers:
 # 0.4 (top padding) + 1.0 (font box) + 1.25 (baseline gap) + 0.35 (underline
-# offset) + 0.75 (bottom padding) = 3.75 total font units of height.
+# offset) + 1.125 (bottom padding) = 4.125 total font units of height.
 _VERTICAL_FONT_SIZE = 34
-_VERTICAL_HEIGHT_MULTIPLIERS = (0.4, 1.0, 1.25, 0.35, 0.75)
+_VERTICAL_HEIGHT_MULTIPLIERS = (0.4, 1.0, 1.25, 0.35, 1.125)
 EXPECTED_VERTICAL_PROBLEM_HEIGHT = _VERTICAL_FONT_SIZE * sum(
     _VERTICAL_HEIGHT_MULTIPLIERS
 )
