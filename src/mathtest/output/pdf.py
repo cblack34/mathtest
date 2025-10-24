@@ -129,6 +129,16 @@ class PdfOutputParams(BaseModel):
         ge=6,
         description="Font size used for the answer key entries.",
     )
+    columns: int = Field(
+        default=4,
+        ge=1,
+        description="Number of problem columns to render per page.",
+    )
+    column_spacing_inches: float = Field(
+        default=0.25,
+        ge=0,
+        description="Horizontal spacing between columns in inches.",
+    )
 
     @property
     def margin(self) -> float:
@@ -141,6 +151,12 @@ class PdfOutputParams(BaseModel):
         """Return the spacing between problems converted to points."""
 
         return self.problem_spacing_inches * inch
+
+    @property
+    def column_spacing(self) -> float:
+        """Return the spacing between columns converted to points."""
+
+        return self.column_spacing_inches * inch
 
 
 class PdfOutputGenerator(OutputGenerator):
@@ -171,33 +187,83 @@ class PdfOutputGenerator(OutputGenerator):
         canvas = Canvas(str(config.path), pagesize=letter)
         canvas.setPageCompression(0)
         width, height = letter
-        current_y = height - config.margin
+        content_width = width - (2 * config.margin)
+        if content_width <= 0:
+            msg = "Configured margins leave no horizontal space for content"
+            raise ValueError(msg)
+
+        total_spacing = config.column_spacing * (config.columns - 1)
+        available_width = content_width - total_spacing
+        if available_width <= 0:
+            msg = "Configured column spacing leaves no room for problem columns"
+            raise ValueError(msg)
+
+        column_width = available_width / config.columns
+        column_offsets = [
+            config.margin + index * (column_width + config.column_spacing)
+            for index in range(config.columns)
+        ]
+
+        current_row_top = height - config.margin
+        current_row_height = 0.0
+        current_column = 0
 
         if config.title:
-            current_y = self._draw_title(canvas, config, width, current_y)
+            current_row_top = self._draw_title(canvas, config, width, current_row_top)
 
         answers: list[str] = []
-        content_width = width - 2 * config.margin
+        current_y = current_row_top
+
+        def advance_row() -> None:
+            nonlocal current_row_top, current_row_height, current_column
+            if current_row_height > 0:
+                current_row_top -= current_row_height + config.problem_spacing
+            current_row_height = 0.0
+            current_column = 0
+
         for problem in problems:
+            if current_column >= config.columns:
+                advance_row()
+
             svg_root = ET.fromstring(problem.svg)
             geometry = _extract_geometry(svg_root)
-            scale = min(1.0, content_width / geometry.width)
+            scale = min(1.0, column_width / geometry.width)
             required_height = geometry.height * scale
 
-            if current_y - required_height < config.margin:
-                canvas.showPage()
-                current_y = height - config.margin
-                if config.title:
-                    current_y = self._draw_title(canvas, config, width, current_y)
+            if current_row_top - required_height < config.margin:
+                if current_row_height > 0 or current_column > 0:
+                    advance_row()
 
-            self._draw_problem(canvas, svg_root, geometry, config, current_y, scale)
-            current_y -= required_height + config.problem_spacing
+            if current_row_top - required_height < config.margin:
+                canvas.showPage()
+                current_row_top = height - config.margin
+                current_row_height = 0.0
+                current_column = 0
+                if config.title:
+                    current_row_top = self._draw_title(
+                        canvas, config, width, current_row_top
+                    )
+                if current_row_top - required_height < config.margin:
+                    msg = "Problem geometry exceeds available page height"
+                    raise ValueError(msg)
+
+            x_offset = column_offsets[current_column]
+            self._draw_problem(
+                canvas, svg_root, geometry, config, current_row_top, scale, x_offset
+            )
+            current_row_height = max(current_row_height, required_height)
+            current_column += 1
 
             answer = problem.data.get("answer")
             if answer is None:
                 msg = "Problem data missing 'answer' field required for the answer key"
                 raise ValueError(msg)
             answers.append(str(answer))
+
+        if current_row_height > 0:
+            current_y = current_row_top - current_row_height - config.problem_spacing
+        else:
+            current_y = current_row_top
 
         if config.include_answers and answers:
             self._draw_answers(canvas, config, height, current_y, answers)
@@ -255,6 +321,7 @@ class PdfOutputGenerator(OutputGenerator):
         config: PdfOutputParams,
         current_y: float,
         scale: float,
+        x_offset: float,
     ) -> None:
         """Render ``svg_root`` using primitive PDF drawing commands."""
 
@@ -263,11 +330,11 @@ class PdfOutputGenerator(OutputGenerator):
             tag = element.tag.split("}")[-1]
             if tag == "text":
                 self._draw_text(
-                    canvas, element, geometry, config, drawing_bottom, scale
+                    canvas, element, geometry, config, drawing_bottom, scale, x_offset
                 )
             elif tag == "line":
                 self._draw_line(
-                    canvas, element, geometry, config, drawing_bottom, scale
+                    canvas, element, geometry, config, drawing_bottom, scale, x_offset
                 )
             else:  # pragma: no cover - ignored SVG elements
                 continue
@@ -280,6 +347,7 @@ class PdfOutputGenerator(OutputGenerator):
         config: PdfOutputParams,
         drawing_bottom: float,
         scale: float,
+        x_offset: float,
     ) -> None:
         """Draw an SVG ``<text>`` element using the configured canvas."""
 
@@ -299,7 +367,7 @@ class PdfOutputGenerator(OutputGenerator):
         anchor = element.attrib.get("text-anchor", "start")
 
         canvas.setFont("Courier", font_size)
-        x_position = config.margin + (svg_x * scale)
+        x_position = x_offset + (svg_x * scale)
         y_position = drawing_bottom + ((geometry.height - svg_y) * scale)
 
         text_width = canvas.stringWidth(text_value, "Courier", font_size)
@@ -318,6 +386,7 @@ class PdfOutputGenerator(OutputGenerator):
         config: PdfOutputParams,
         drawing_bottom: float,
         scale: float,
+        x_offset: float,
     ) -> None:
         """Draw an SVG ``<line>`` element with basic styling."""
 
@@ -340,8 +409,8 @@ class PdfOutputGenerator(OutputGenerator):
         canvas.setLineWidth(stroke_width)
 
         canvas.line(
-            config.margin + (x1 * scale),
+            x_offset + (x1 * scale),
             drawing_bottom + ((geometry.height - y1) * scale),
-            config.margin + (x2 * scale),
+            x_offset + (x2 * scale),
             drawing_bottom + ((geometry.height - y2) * scale),
         )
