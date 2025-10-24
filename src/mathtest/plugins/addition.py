@@ -66,13 +66,19 @@ def _render_vertical_problem(
         consistent.
     """
 
-    height = 90
-    margin = 12
-    top_y = 32
-    bottom_y = 64
-    line_y = bottom_y + 6
-    font_size = 28
+    font_size = 34
     char_width = font_size * 0.6
+    margin = font_size * 0.45
+    top_padding = font_size * 0.4
+    baseline_gap = font_size * 1.25
+    underline_offset = font_size * 0.35
+    # Provide extra writing room beneath the underline for student answers.
+    bottom_padding = font_size * 1.125
+
+    top_y = top_padding + font_size
+    bottom_y = top_y + baseline_gap
+    line_y = bottom_y + underline_offset
+    height = line_y + bottom_padding
 
     top_text = _format_operand(top)
     bottom_operand = _format_operand(bottom)
@@ -83,7 +89,9 @@ def _render_vertical_problem(
     digit_span = max_operand_chars * char_width
     left_padding = margin + operator_prefix_chars * char_width
     digit_anchor_x = left_padding + digit_span
-    underline_start_x = digit_anchor_x - (len(bottom_operand) * char_width) - (operator_prefix_chars * char_width)
+    underline_start_x = digit_anchor_x - (
+        (len(bottom_operand) + operator_prefix_chars) * char_width
+    )
     underline_end_x = digit_anchor_x
     width = digit_anchor_x + margin
 
@@ -91,9 +99,9 @@ def _render_vertical_problem(
         return round(value, 4)
 
     drawing = svgwrite.Drawing(
-        size=(f"{_round(width):.2f}px", f"{height}px"),
+        size=(f"{_round(width):.2f}px", f"{_round(height):.2f}px"),
     )
-    drawing.viewbox(0, 0, _round(width), height)
+    drawing.viewbox(0, 0, _round(width), _round(height))
 
     text_style = {
         "font_size": f"{font_size}px",
@@ -104,21 +112,21 @@ def _render_vertical_problem(
     drawing.add(
         drawing.text(
             top_text,
-            insert=(_round(digit_anchor_x), top_y),
+            insert=(_round(digit_anchor_x), _round(top_y)),
             **text_style,
         )
     )
     drawing.add(
         drawing.text(
             f"{operator} {bottom_operand}",
-            insert=(_round(digit_anchor_x), bottom_y),
+            insert=(_round(digit_anchor_x), _round(bottom_y)),
             **text_style,
         )
     )
     drawing.add(
         drawing.line(
-            start=(_round(underline_start_x), line_y),
-            end=(_round(underline_end_x), line_y),
+            start=(_round(underline_start_x), _round(line_y)),
+            end=(_round(underline_end_x), _round(line_y)),
             stroke="#000000",
             stroke_width=2,
         )
