@@ -236,3 +236,38 @@ def test_cli_answer_key_flag_controls_pdf_section(tmp_path: Path) -> None:
     assert with_result.exit_code == 0, with_result.output
     assert with_path.exists()
     assert b"Answer Key" in with_path.read_bytes()
+
+
+def test_cli_generates_clock_problems(tmp_path: Path) -> None:
+    """Clock plugin flags should integrate with the CLI surface."""
+
+    runner = CliRunner()
+    json_path = tmp_path / "clock.json"
+
+    result = _invoke(
+        runner,
+        [
+            "--clock",
+            "--clock-random-seed",
+            "5",
+            "--clock-minute-interval",
+            "5",
+            "--clock-accurate-hour",
+            "True",
+            "--total-problems",
+            "4",
+            "--json-output",
+            str(json_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json_path.exists()
+
+    serialized = json.loads(json_path.read_text(encoding="utf-8"))
+    assert len(serialized) == 4
+    assert {entry["type"] for entry in serialized} == {"clock"}
+
+    first = serialized[0]["data"]
+    assert first["minute"] % first["minute_interval"] == 0
+    assert first["answer"].endswith(f":{first['minute']:02d}")
