@@ -194,3 +194,45 @@ def test_cli_inserts_generate_prefix_for_flags(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert pdf_path.exists()
+
+
+def test_cli_answer_key_flag_controls_pdf_section(tmp_path: Path) -> None:
+    """The answer key should only render when the dedicated flag is provided."""
+
+    runner = CliRunner()
+    base_args = [
+        "--addition",
+        "--addition-random-seed",
+        "7",
+        "--total-problems",
+        "1",
+    ]
+
+    without_path = tmp_path / "without.pdf"
+    without_result = _invoke(
+        runner,
+        [
+            *base_args,
+            "--output",
+            str(without_path),
+        ],
+    )
+
+    assert without_result.exit_code == 0, without_result.output
+    assert without_path.exists()
+    assert b"Answer Key" not in without_path.read_bytes()
+
+    with_path = tmp_path / "with.pdf"
+    with_result = _invoke(
+        runner,
+        [
+            *base_args,
+            "--answer-key",
+            "--output",
+            str(with_path),
+        ],
+    )
+
+    assert with_result.exit_code == 0, with_result.output
+    assert with_path.exists()
+    assert b"Answer Key" in with_path.read_bytes()

@@ -108,8 +108,11 @@ class PdfOutputParams(BaseModel):
         description="Whether the answer key should start on a new page.",
     )
     include_answers: bool = Field(
-        default=True,
-        description="Toggle rendering of the answer key section.",
+        default=False,
+        description=(
+            "Toggle rendering of the answer key section. Defaults to False so the "
+            "CLI must opt in via the --answer-key flag."
+        ),
     )
     answer_title: str = Field(
         default="Answer Key",
