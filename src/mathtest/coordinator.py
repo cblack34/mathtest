@@ -101,6 +101,10 @@ class SerializedProblem(BaseModel):
             Serialized payload ready to be dumped as JSON.
         """
 
+        if "problem_type" not in cls.model_fields:
+            msg = "SerializedProblem must define a 'problem_type' field"
+            raise ValueError(msg)
+
         payload = {"problem_type": plugin_name, "data": dict(problem.data)}
         return cls.model_validate(payload)
 
