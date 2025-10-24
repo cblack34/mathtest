@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -109,3 +110,35 @@ def test_cli_requires_plugin_without_json(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "Select at least one plugin flag" in result.output
+
+
+def test_cli_mixed_plugins_are_interleaved(tmp_path: Path) -> None:
+    """Runs with multiple plugins should interleave problem types."""
+
+    runner = CliRunner()
+    random.seed(0)
+
+    json_path = tmp_path / "mixed.json"
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "--addition",
+            "--subtraction",
+            "--addition-random-seed",
+            "1",
+            "--subtraction-random-seed",
+            "1",
+            "--json-output",
+            str(json_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+
+    serialized = json.loads(json_path.read_text(encoding="utf-8"))
+    types = [entry["type"] for entry in serialized]
+
+    assert len(types) == 10
+    assert "addition" in types and "subtraction" in types
+    assert any(left != right for left, right in zip(types, types[1:]))

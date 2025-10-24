@@ -9,6 +9,7 @@ a consistent orchestration layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from random import shuffle
 from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -210,6 +211,9 @@ class Coordinator:
 
         problems: list[Problem] = []
         serialized: list[SerializedProblem] = []
+        plugin_instances: dict[str, Any] = {}
+        generation_plan: list[str] = []
+
         for plugin_request in request.plugin_requests:
             if plugin_request.quantity <= 0:
                 continue
@@ -223,17 +227,24 @@ class Coordinator:
                 msg = f"Failed to instantiate plugin '{plugin_request.name}'"
                 raise CoordinatorError(msg) from exc
 
-            for _ in range(plugin_request.quantity):
-                try:
-                    problem = plugin.generate_problem()
-                except Exception as exc:  # pragma: no cover - plugin runtime error
-                    msg = f"Plugin '{plugin_request.name}' failed during generation"
-                    raise CoordinatorError(msg) from exc
+            plugin_instances[plugin_request.name] = plugin
+            generation_plan.extend([plugin_request.name] * plugin_request.quantity)
 
-                problems.append(problem)
-                serialized.append(
-                    SerializedProblem.from_problem(plugin_request.name, problem)
-                )
+        if not generation_plan:
+            return GenerationResult(problems=problems, serialized=serialized)
+
+        shuffle(generation_plan)
+
+        for plugin_name in generation_plan:
+            plugin = plugin_instances[plugin_name]
+            try:
+                problem = plugin.generate_problem()
+            except Exception as exc:  # pragma: no cover - plugin runtime error
+                msg = f"Plugin '{plugin_name}' failed during generation"
+                raise CoordinatorError(msg) from exc
+
+            problems.append(problem)
+            serialized.append(SerializedProblem.from_problem(plugin_name, problem))
         return GenerationResult(problems=problems, serialized=serialized)
 
     def _build_parameters(
