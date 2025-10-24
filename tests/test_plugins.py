@@ -7,7 +7,6 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from mathtest.plugins.addition import AdditionPlugin, _VERTICAL_FONT_SIZE, _VERTICAL_HEIGHT_MULTIPLIERS
-from mathtest.plugins.addition import AdditionPlugin
 from mathtest.plugins.clock import ClockPlugin
 from mathtest.plugins.subtraction import SubtractionPlugin
 
