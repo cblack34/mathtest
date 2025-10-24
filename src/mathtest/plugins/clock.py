@@ -282,7 +282,7 @@ def _render_clock_face(data: _ClockData) -> str:
         )
     )
 
-    answer_line_y = height - 40.0
+    answer_line_y = height
     answer_label_x = width * 0.12
     answer_line_start = (answer_label_x + 90.0, answer_line_y)
     answer_line_end = (width * 0.88, answer_line_y)
