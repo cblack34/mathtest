@@ -1,6 +1,79 @@
-# Mathtest AI Coding Agent Instructions
+# Agent Instructions
 
-This document provides guidelines for AI coding agents (e.g., GitHub Copilot powered by OpenAI Codex) assisting in Mathtest development. Agents must read and follow these instructions in every interaction, ensuring code aligns with the project's architecture, best practices, and documents: PRD.md (product requirements), SDD.md (system design), and MVP.md (MVP plan). Always prioritize quality, extensibility, and maintainability.
+## Package Management
+- Use [uv](https://github.com/astral-sh/uv) for all Python package management.
+  - Add production packages: `uv add <package>`
+  - Add development packages: `uv add --group dev <package>`
+- Always use the `.venv` environment when running code for this repository.
+
+## Code Style & Quality
+- Use absolute imports throughout the codebase.
+- Follow [PEP8](https://peps.python.org/pep-0008/) for code style and formatting.
+- Use [Black](https://black.readthedocs.io/) for code formatting: `black .`
+- Use [isort](https://pycqa.github.io/isort/) for import organization: `isort .`
+- Use [mypy](http://mypy-lang.org/) for static type checking: `mypy .`
+- Use Google-style docstrings for all public functions, classes, and methods.
+- Adhere to Clean Code principles (Uncle Bob) and ArjanCodes' best practices for readability, maintainability, and modularity.
+- Proactively refactor to avoid code smells and anti-patterns.
+- Practice dependency injection to decouple components and improve testability.
+- Prefer immutable data structures for fixed data (e.g., tuples over lists).
+- Use the standard library's `logging` module for all logging (never use print for logging).
+- Handle exceptions gracefully; avoid bare `except` clauses.
+- Validate all inputs and never expose sensitive data.
+
+## Testing
+- Use [pytest](https://docs.pytest.org/) for all testing: `uv run pytest`
+- Use [pytest-cov](https://pytest-cov.readthedocs.io/) for coverage: `uv run pytest --cov`
+
+
+## Data & Configuration
+- Use [pydantic](https://docs.pydantic.dev/) for data models.
+- Use [pydantic-settings](https://docs.pydantic.dev/latest/usage/pydantic_settings/) for configuration management. Never hardcode secrets or config in code.
+- Use [SQLModel](https://sqlmodel.tiangolo.com/) for ORM/database models.
+
+## CLI Applications
+- Use [typer](https://typer.tiangolo.com/) for CLI applications.
+
+## Documentation
+- Keep the README and all documentation up to date.
+- Use clear, consistent formatting and section headers.
+
+## Context7 Integration
+- To enable up-to-date code and documentation context, configure Context7 MCP as follows:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"]
+    }
+  }
+}
+```
+
+- For remote Context7 MCP, use:
+
+```json
+{
+  "mcpServers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp"
+    }
+  }
+}
+```
+
+- For more, see the [Context7 documentation](https://github.com/upstash/context7).
+
+---
+
+**Summary:**
+- Use modern, robust tools for Python development.
+- Enforce code quality, security, and maintainability.
+- Structure code into small, modular, and testable components.
+- Keep documentation and configuration current.
+
 
 ## Core Principles
 Follow SOLID principles to ensure clean, scalable code:
