@@ -304,7 +304,7 @@ class PdfOutputGenerator(OutputGenerator):
             return next_y
 
         label_font_size = max(
-            float(config.answer_font_size), MIN_HEADER_LABEL_FONT_SIZE
+            float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE
         )
         canvas.setFont(config.body_font, label_font_size)
         label_padding = label_font_size * HEADER_LABEL_PADDING_FACTOR
@@ -319,6 +319,9 @@ class PdfOutputGenerator(OutputGenerator):
         date_x = name_x + name_field_width + gap_width
         line_y = next_y - underline_offset
 
+        # ``draw_field`` relies on variables from the outer scope for layout and font
+        # configuration: ``next_y``, ``line_y``, ``label_font_size``,
+        # ``config.body_font``, and ``canvas``.
         def draw_field(label: str, field_x: float, field_width: float) -> None:
             canvas.drawString(field_x, next_y, label)
             label_width = canvas.stringWidth(label, config.body_font, label_font_size)
