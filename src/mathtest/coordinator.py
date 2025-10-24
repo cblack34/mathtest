@@ -9,6 +9,7 @@ a consistent orchestration layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import hashlib
 import random
 from typing import Any, Mapping
@@ -324,6 +325,7 @@ class Coordinator:
     ) -> int:
         """Create a deterministic shuffle seed from plugin seeds and plan."""
 
-        material = "|".join(components + plan)
+        payload = {"components": components, "plan": plan}
+        material = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
         digest = hashlib.sha256(material.encode("utf-8")).digest()
-        return int.from_bytes(digest, "big")
+        return int.from_bytes(digest[:8], "big")
