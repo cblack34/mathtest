@@ -72,12 +72,14 @@ def test_pdf_output_columns_layout(
     ) -> None:
         if not observed_config:
             observed_config.append(config)
+        scaled_height = geometry.height * scale
         placements.append(
             {
                 "x": x_offset,
                 "top": current_y,
+                "bottom": current_y - scaled_height,
                 "width": geometry.width * scale,
-                "height": geometry.height * scale,
+                "height": scaled_height,
             }
         )
         original_draw_problem(
@@ -138,9 +140,13 @@ def test_pdf_output_columns_layout(
             continue
         column_placements.sort(key=lambda item: item["top"], reverse=True)
         for first, second in zip(column_placements, column_placements[1:]):
-            previous_bottom = first["top"] - first["height"]
-            if previous_bottom >= second["top"]:
-                assert previous_bottom - second["top"] >= config.problem_spacing - tolerance
+            previous_bottom = first["bottom"]
+            gap = previous_bottom - second["top"]
+            # ``gap`` is positive when the problems are separated. Negative values
+            # indicate overlap because PDF coordinates decrease as we move down the
+            # page.
+            assert gap >= -tolerance
+            assert gap + tolerance >= config.problem_spacing
 
     for row_columns in rows.values():
         assert len(row_columns) == len(set(row_columns))

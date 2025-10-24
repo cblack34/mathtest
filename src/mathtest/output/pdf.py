@@ -231,7 +231,7 @@ class PdfOutputGenerator(OutputGenerator):
             required_height = geometry.height * scale
 
             if current_row_top - required_height < config.margin:
-                if current_row_height > 0 or current_column > 0:
+                if current_row_height > 0 and current_column > 0:
                     advance_row()
 
             if current_row_top - required_height < config.margin:
