@@ -29,6 +29,7 @@ HEADER_UNDERLINE_OFFSET_FACTOR = 0.3
 NAME_FIELD_WIDTH_RATIO = 0.5
 DATE_FIELD_WIDTH_RATIO = 0.35
 HEADER_SPACING_MULTIPLIER = 1.6
+FLOAT_TOLERANCE = 1e-9
 
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -75,6 +76,44 @@ class _SvgGeometry:
 
     width: float
     height: float
+
+
+@dataclass
+class _PreparedProblem:
+    """Pre-parsed SVG metadata used during layout planning."""
+
+    problem: Problem
+    svg_root: ET.Element
+    geometry: _SvgGeometry
+    scale: float
+    scaled_height: float
+    scaled_width: float
+
+
+@dataclass
+class _Placement:
+    """Drawing metadata for a problem positioned within a row."""
+
+    prepared: _PreparedProblem
+    column_index: int
+    x_offset: float
+    top: float
+
+
+@dataclass
+class _RowLayout:
+    """Problems that share a common top coordinate on a page."""
+
+    top: float
+    height: float
+    placements: list[_Placement]
+
+
+@dataclass
+class _PageLayout:
+    """Collection of rows scheduled to render on the same page."""
+
+    rows: list[_RowLayout]
 
 
 def _extract_geometry(svg_root: ET.Element) -> _SvgGeometry:
@@ -220,57 +259,29 @@ class PdfOutputGenerator(OutputGenerator):
             config.margin + index * (column_width + config.column_spacing)
             for index in range(config.columns)
         ]
-
-        current_row_top = height - config.margin
-        current_row_height = 0.0
-        current_column = 0
-
-        if config.title:
-            current_row_top = self._draw_title(canvas, config, width, current_row_top)
+        page_initial_top = self._page_initial_row_top(config, height)
 
         answers: list[str] = []
-        current_y = current_row_top
-
-        def advance_row() -> None:
-            nonlocal current_row_top, current_row_height, current_column
-            if current_row_height > 0:
-                current_row_top -= current_row_height + config.problem_spacing
-            current_row_height = 0.0
-            current_column = 0
-
+        prepared_problems: list[_PreparedProblem] = []
         for problem in problems:
-            if current_column >= config.columns:
-                advance_row()
-
             svg_root = ET.fromstring(problem.svg)
             geometry = _extract_geometry(svg_root)
-            scale = min(1.0, column_width / geometry.width)
+            if geometry.width <= 0:
+                msg = "Problem SVG width must be positive"
+                raise ValueError(msg)
+
+            scale = column_width / geometry.width
             scaled_height = geometry.height * scale
-            scaled_width = geometry.width * scale
-
-            if current_row_top - scaled_height < config.margin:
-                if current_row_height > 0 and current_column > 0:
-                    advance_row()
-
-            if current_row_top - scaled_height < config.margin:
-                canvas.showPage()
-                current_row_top = height - config.margin
-                current_row_height = 0.0
-                current_column = 0
-                if config.title:
-                    current_row_top = self._draw_title(
-                        canvas, config, width, current_row_top
-                    )
-                if current_row_top - scaled_height < config.margin:
-                    msg = "Problem geometry exceeds available page height"
-                    raise ValueError(msg)
-
-            x_offset = column_offsets[current_column] + max(0, column_width - scaled_width)
-            self._draw_problem(
-                canvas, svg_root, geometry, config, current_row_top, scale, x_offset
+            prepared_problems.append(
+                _PreparedProblem(
+                    problem=problem,
+                    svg_root=svg_root,
+                    geometry=geometry,
+                    scale=scale,
+                    scaled_height=scaled_height,
+                    scaled_width=column_width,
+                )
             )
-            current_row_height = max(current_row_height, scaled_height)
-            current_column += 1
 
             answer = problem.data.get("answer")
             if answer is None:
@@ -278,15 +289,153 @@ class PdfOutputGenerator(OutputGenerator):
                 raise ValueError(msg)
             answers.append(str(answer))
 
-        if current_row_height > 0:
-            current_y = current_row_top - current_row_height
+        pages: list[_PageLayout] = []
+        current_page_rows: list[_RowLayout] = []
+        current_row_top = page_initial_top
+        current_row = _RowLayout(
+            top=current_row_top, height=0.0, placements=[]
+        )
+        current_row_height = 0.0
+        current_column = 0
+
+        def advance_row() -> None:
+            nonlocal current_row_top, current_row_height, current_row, current_column, current_page_rows
+            if current_row.placements:
+                row_height = current_row_height
+                current_row.height = row_height
+                current_page_rows.append(current_row)
+                current_row_top -= row_height + config.problem_spacing
+            current_row = _RowLayout(
+                top=current_row_top, height=0.0, placements=[]
+            )
+            current_row_height = 0.0
+            current_column = 0
+
+        def start_new_page() -> None:
+            nonlocal current_row_top, current_row_height, current_row, current_column, current_page_rows, pages
+            if current_row.placements:
+                current_row.height = current_row_height
+                current_page_rows.append(current_row)
+            if current_page_rows:
+                pages.append(_PageLayout(rows=current_page_rows))
+            current_page_rows = []
+            current_row_top = page_initial_top
+            current_row = _RowLayout(
+                top=current_row_top, height=0.0, placements=[]
+            )
+            current_row_height = 0.0
+            current_column = 0
+
+        for prepared in prepared_problems:
+            scaled_height = prepared.scaled_height
+
+            if current_column >= config.columns:
+                advance_row()
+
+            if current_row_top - scaled_height < config.margin:
+                if current_row_height > 0 and current_column > 0:
+                    advance_row()
+
+            if current_row_top - scaled_height < config.margin:
+                start_new_page()
+                if current_row_top - scaled_height < config.margin:
+                    msg = "Problem geometry exceeds available page height"
+                    raise ValueError(msg)
+
+            remaining_width = column_width - prepared.scaled_width
+            if abs(remaining_width) <= FLOAT_TOLERANCE:
+                remaining_width = 0.0
+
+            x_offset = column_offsets[current_column] + max(0.0, remaining_width)
+            placement = _Placement(
+                prepared=prepared,
+                column_index=current_column,
+                x_offset=x_offset,
+                top=current_row_top,
+            )
+            current_row.placements.append(placement)
+            current_row_height = max(current_row_height, scaled_height)
+            current_row.height = current_row_height
+            current_column += 1
+
+        if current_row.placements:
+            current_row.height = current_row_height
+            current_page_rows.append(current_row)
+        if current_page_rows:
+            pages.append(_PageLayout(rows=current_page_rows))
+
+        for page in pages:
+            rows = page.rows
+            if not rows:
+                continue
+            last_row = rows[-1]
+            last_bottom = last_row.top - last_row.height
+            extra_space = last_bottom - config.margin
+            if extra_space > FLOAT_TOLERANCE:
+                if len(rows) == 1:
+                    shift = extra_space
+                    row = rows[0]
+                    row.top -= shift
+                    for placement in row.placements:
+                        placement.top -= shift
+                else:
+                    gap_increment = extra_space / (len(rows) - 1)
+                    cumulative_shift = 0.0
+                    for row in rows[1:]:
+                        cumulative_shift += gap_increment
+                        row.top -= cumulative_shift
+                        for placement in row.placements:
+                            placement.top -= cumulative_shift
+
+        for page_index, page in enumerate(pages):
+            if page_index > 0:
+                canvas.showPage()
+            current_header_top = height - config.margin
+            if config.title:
+                current_header_top = self._draw_title(
+                    canvas, config, width, current_header_top
+                )
+            for row in page.rows:
+                for placement in row.placements:
+                    self._draw_problem(
+                        canvas,
+                        placement.prepared.svg_root,
+                        placement.prepared.geometry,
+                        config,
+                        placement.top,
+                        placement.prepared.scale,
+                        placement.x_offset,
+                    )
+
+        if pages and pages[-1].rows:
+            last_row = pages[-1].rows[-1]
+            current_y = last_row.top - last_row.height
         else:
-            current_y = current_row_top
+            current_y = page_initial_top
 
         if config.include_answers and answers:
             self._draw_answers(canvas, config, height, current_y, answers)
 
         canvas.save()
+
+    def _page_initial_row_top(
+        self, config: PdfOutputParams, page_height: float
+    ) -> float:
+        """Return the top coordinate for the first row on a page."""
+
+        top = page_height - config.margin
+        if config.title:
+            top -= self._title_block_height(config)
+        return top
+
+    def _title_block_height(self, config: PdfOutputParams) -> float:
+        """Compute the vertical space consumed by the title and header."""
+
+        height = config.title_font_size * 1.5
+        if not config.include_student_header:
+            return height
+        label_font_size = max(float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE)
+        return height + (label_font_size * HEADER_SPACING_MULTIPLIER)
 
     def _draw_title(
         self,
@@ -302,7 +451,7 @@ class PdfOutputGenerator(OutputGenerator):
         next_y = current_y - (config.title_font_size * 1.5)
 
         if not config.include_student_header:
-            return next_y
+            return current_y - self._title_block_height(config)
 
         label_font_size = max(float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE)
         canvas.setFont(config.body_font, label_font_size)
@@ -335,7 +484,7 @@ class PdfOutputGenerator(OutputGenerator):
 
         next_y -= label_font_size * HEADER_SPACING_MULTIPLIER
 
-        return next_y
+        return current_y - self._title_block_height(config)
 
     def _draw_answers(
         self,
