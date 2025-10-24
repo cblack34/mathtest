@@ -29,7 +29,7 @@ import pytest
 
 from mathtest.interface import Problem
 from mathtest.output import PdfOutputGenerator
-from mathtest.output.pdf import LETTER_PAGE_SIZE
+from mathtest.output.pdf import LETTER_PAGE_SIZE, PdfOutputParams
 from mathtest.plugins.addition import AdditionPlugin
 
 
@@ -121,36 +121,28 @@ def test_pdf_output_columns_layout(
     output_path = tmp_path / "columns.pdf"
 
     placements: list[dict[str, float]] = []
-    observed_config: list[Any] = []
     original_draw_problem = PdfOutputGenerator._draw_problem
 
     def capture_draw(
         self: PdfOutputGenerator,
         canvas: Any,
-        svg_root: Any,
-        geometry: Any,
-        config: Any,
+        prepared: Any,
         current_y: float,
-        scale: float,
         x_offset: float,
     ) -> None:
-        if not observed_config:
-            observed_config.append(config)
-        scaled_height = geometry.height * scale
+        scaled_height = prepared.scaled_height
         placements.append(
             {
                 "x": x_offset,
                 "top": current_y,
                 "bottom": current_y - scaled_height,
-                "width": geometry.width * scale,
+                "width": prepared.scaled_width,
                 "height": scaled_height,
-                "original_width": geometry.width,
+                "original_width": prepared.geometry.width,
                 "problem_index": len(placements),
             }
         )
-        original_draw_problem(
-            self, canvas, svg_root, geometry, config, current_y, scale, x_offset
-        )
+        original_draw_problem(self, canvas, prepared, current_y, x_offset)
 
     monkeypatch.setattr(PdfOutputGenerator, "_draw_problem", capture_draw)
 
@@ -158,7 +150,7 @@ def test_pdf_output_columns_layout(
 
     assert output_path.exists()
     assert placements
-    config = observed_config[0]
+    config = PdfOutputParams.model_validate({"path": output_path})
 
     page_width, _ = LETTER_PAGE_SIZE
     column_spacing = config.column_spacing

@@ -10,6 +10,7 @@ extensible for future problem types.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping, Sequence
@@ -70,20 +71,6 @@ def _split_viewbox(value: str | None) -> tuple[float, float, float, float]:
     return tuple(float(part) for part in parts)  # type: ignore[return-value]
 
 
-def _hex_to_rgb(value: str) -> tuple[int, int, int]:
-    """Return an RGB tuple parsed from a hex ``value``."""
-
-    match = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", value.strip())
-    if match is None:
-        msg = f"Unsupported SVG color '{value}'"
-        raise ValueError(msg)
-
-    digits = match.group(1)
-    if len(digits) == 3:
-        digits = "".join(ch * 2 for ch in digits)
-    return tuple(int(digits[index : index + 2], 16) for index in range(0, 6, 2))
-
-
 def _to_pdf_y(value: float) -> float:
     """Convert a bottom-origin coordinate to FPDF's top-origin system."""
 
@@ -103,7 +90,6 @@ class _PreparedProblem:
     """Pre-parsed SVG metadata used during layout planning."""
 
     problem: Problem
-    svg_root: ET.Element
     geometry: _SvgGeometry
     scale: float
     scaled_height: float
@@ -296,7 +282,6 @@ class PdfOutputGenerator(OutputGenerator):
             prepared_problems.append(
                 _PreparedProblem(
                     problem=problem,
-                    svg_root=svg_root,
                     geometry=geometry,
                     scale=scale,
                     scaled_height=scaled_height,
@@ -419,11 +404,8 @@ class PdfOutputGenerator(OutputGenerator):
                 for placement in row.placements:
                     self._draw_problem(
                         pdf,
-                        placement.prepared.svg_root,
-                        placement.prepared.geometry,
-                        config,
+                        placement.prepared,
                         placement.top,
-                        placement.prepared.scale,
                         placement.x_offset,
                     )
 
@@ -551,164 +533,19 @@ class PdfOutputGenerator(OutputGenerator):
     def _draw_problem(
         self,
         pdf: FPDF,
-        svg_root: ET.Element,
-        geometry: _SvgGeometry,
-        config: PdfOutputParams,
+        prepared: _PreparedProblem,
         current_y: float,
-        scale: float,
         x_offset: float,
     ) -> None:
-        """Render ``svg_root`` using primitive PDF drawing commands."""
+        """Render ``prepared`` using fpdf2's native SVG support."""
 
-        drawing_bottom = current_y - (geometry.height * scale)
-        for element in svg_root:
-            tag = element.tag.split("}")[-1]
-            if tag == "text":
-                self._draw_text(
-                    pdf, element, geometry, config, drawing_bottom, scale, x_offset
-                )
-            elif tag == "line":
-                self._draw_line(
-                    pdf, element, geometry, config, drawing_bottom, scale, x_offset
-                )
-            elif tag == "circle":
-                self._draw_circle(
-                    pdf, element, geometry, drawing_bottom, scale, x_offset
-                )
-            else:  # pragma: no cover - ignored SVG elements
-                continue
-
-    def _draw_text(
-        self,
-        pdf: FPDF,
-        element: ET.Element,
-        geometry: _SvgGeometry,
-        config: PdfOutputParams,
-        drawing_bottom: float,
-        scale: float,
-        x_offset: float,
-    ) -> None:
-        """Draw an SVG ``<text>`` element using the configured PDF context."""
-
-        text_value = "".join(element.itertext())
-        if not text_value:
-            return
-
-        try:
-            svg_x = float(element.attrib.get("x", "0"))
-            svg_y = float(element.attrib.get("y", "0"))
-        except ValueError as exc:
-            raise ValueError(
-                "SVG text element contains non-numeric coordinates"
-            ) from exc
-
-        font_size = _parse_svg_length(element.attrib.get("font-size"), 12.0) * scale
-        anchor = element.attrib.get("text-anchor", "start")
-
-        pdf.set_font("Courier", size=font_size)
-        x_position = x_offset + (svg_x * scale)
-        y_position = drawing_bottom + ((geometry.height - svg_y) * scale)
-
-        text_width = pdf.get_string_width(text_value)
-        if anchor == "middle":
-            x_position -= text_width / 2
-        elif anchor == "end":
-            x_position -= text_width
-
-        pdf.text(x_position, _to_pdf_y(y_position), text_value)
-
-    def _draw_line(
-        self,
-        pdf: FPDF,
-        element: ET.Element,
-        geometry: _SvgGeometry,
-        config: PdfOutputParams,
-        drawing_bottom: float,
-        scale: float,
-        x_offset: float,
-    ) -> None:
-        """Draw an SVG ``<line>`` element with basic styling."""
-
-        try:
-            x1 = float(element.attrib.get("x1", "0"))
-            y1 = float(element.attrib.get("y1", "0"))
-            x2 = float(element.attrib.get("x2", "0"))
-            y2 = float(element.attrib.get("y2", "0"))
-        except ValueError as exc:
-            raise ValueError(
-                "SVG line element contains non-numeric coordinates"
-            ) from exc
-
-        stroke = element.attrib.get("stroke", "#000000")
-        stroke_width = (
-            _parse_svg_length(element.attrib.get("stroke-width"), 1.0) * scale
+        svg_bytes = prepared.problem.svg.encode("utf-8")
+        pdf.image(
+            BytesIO(svg_bytes),
+            x=x_offset,
+            y=_to_pdf_y(current_y),
+            w=prepared.scaled_width,
+            h=prepared.scaled_height,
+            keep_aspect_ratio=True,
         )
-
-        pdf.set_draw_color(*_hex_to_rgb(stroke))
-        pdf.set_line_width(stroke_width)
-
-        pdf.line(
-            x_offset + (x1 * scale),
-            _to_pdf_y(drawing_bottom + ((geometry.height - y1) * scale)),
-            x_offset + (x2 * scale),
-            _to_pdf_y(drawing_bottom + ((geometry.height - y2) * scale)),
-        )
-
-    def _draw_circle(
-        self,
-        pdf: FPDF,
-        element: ET.Element,
-        geometry: _SvgGeometry,
-        drawing_bottom: float,
-        scale: float,
-        x_offset: float,
-    ) -> None:
-        """Draw an SVG ``<circle>`` element."""
-
-        try:
-            cx = _parse_svg_length(element.attrib.get("cx"), 0.0)
-            cy = _parse_svg_length(element.attrib.get("cy"), 0.0)
-            radius = _parse_svg_length(element.attrib.get("r"), 0.0)
-        except ValueError as exc:  # pragma: no cover - defensive validation
-            raise ValueError(
-                "SVG circle element contains non-numeric coordinates"
-            ) from exc
-
-        if radius <= 0:
-            return
-
-        stroke_value = element.attrib.get("stroke")
-        fill_value = element.attrib.get("fill")
-        if fill_value is None:
-            fill_value = "#000000"
-
-        style: str
-        if fill_value and fill_value.lower() != "none":
-            pdf.set_fill_color(*_hex_to_rgb(fill_value))
-            if stroke_value and stroke_value.lower() != "none":
-                pdf.set_draw_color(*_hex_to_rgb(stroke_value))
-                stroke_width = (
-                    _parse_svg_length(element.attrib.get("stroke-width"), 1.0)
-                    * scale
-                )
-                pdf.set_line_width(stroke_width)
-                style = "FD"
-            else:
-                style = "F"
-        else:
-            if not stroke_value or stroke_value.lower() == "none":
-                return
-            pdf.set_draw_color(*_hex_to_rgb(stroke_value))
-            stroke_width = (
-                _parse_svg_length(element.attrib.get("stroke-width"), 1.0)
-                * scale
-            )
-            pdf.set_line_width(stroke_width)
-            style = "D"
-
-        diameter = radius * 2 * scale
-        x_position = x_offset + ((cx - radius) * scale)
-        y_top = drawing_bottom + ((geometry.height - (cy + radius)) * scale)
-
-        pdf.ellipse(x_position, _to_pdf_y(y_top), diameter, diameter, style=style)
 
