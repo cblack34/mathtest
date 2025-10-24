@@ -409,17 +409,16 @@ app.registered_commands.append(
 def _normalize_argv(args: Sequence[str]) -> list[str]:
     """Ensure the CLI falls back to ``generate`` when flags are provided directly."""
 
-    normalized = list(args)
-    if not normalized:
+    if not args:
         return ["generate"]
 
-    first = normalized[0]
+    first = args[0]
     known_commands = {command.name for command in app.registered_commands}
 
     if first in known_commands or not first.startswith("-"):
-        return normalized
+        return list(args)
 
-    return ["generate", *normalized]
+    return ["generate", *args]
 
 
 def main(argv: Sequence[str] | None = None) -> None:
