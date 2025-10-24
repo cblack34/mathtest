@@ -571,6 +571,10 @@ class PdfOutputGenerator(OutputGenerator):
                 self._draw_line(
                     pdf, element, geometry, config, drawing_bottom, scale, x_offset
                 )
+            elif tag == "circle":
+                self._draw_circle(
+                    pdf, element, geometry, drawing_bottom, scale, x_offset
+                )
             else:  # pragma: no cover - ignored SVG elements
                 continue
 
@@ -649,4 +653,62 @@ class PdfOutputGenerator(OutputGenerator):
             x_offset + (x2 * scale),
             _to_pdf_y(drawing_bottom + ((geometry.height - y2) * scale)),
         )
+
+    def _draw_circle(
+        self,
+        pdf: FPDF,
+        element: ET.Element,
+        geometry: _SvgGeometry,
+        drawing_bottom: float,
+        scale: float,
+        x_offset: float,
+    ) -> None:
+        """Draw an SVG ``<circle>`` element."""
+
+        try:
+            cx = _parse_svg_length(element.attrib.get("cx"), 0.0)
+            cy = _parse_svg_length(element.attrib.get("cy"), 0.0)
+            radius = _parse_svg_length(element.attrib.get("r"), 0.0)
+        except ValueError as exc:  # pragma: no cover - defensive validation
+            raise ValueError(
+                "SVG circle element contains non-numeric coordinates"
+            ) from exc
+
+        if radius <= 0:
+            return
+
+        stroke_value = element.attrib.get("stroke")
+        fill_value = element.attrib.get("fill")
+        if fill_value is None:
+            fill_value = "#000000"
+
+        style: str
+        if fill_value and fill_value.lower() != "none":
+            pdf.set_fill_color(*_hex_to_rgb(fill_value))
+            if stroke_value and stroke_value.lower() != "none":
+                pdf.set_draw_color(*_hex_to_rgb(stroke_value))
+                stroke_width = (
+                    _parse_svg_length(element.attrib.get("stroke-width"), 1.0)
+                    * scale
+                )
+                pdf.set_line_width(stroke_width)
+                style = "FD"
+            else:
+                style = "F"
+        else:
+            if not stroke_value or stroke_value.lower() == "none":
+                return
+            pdf.set_draw_color(*_hex_to_rgb(stroke_value))
+            stroke_width = (
+                _parse_svg_length(element.attrib.get("stroke-width"), 1.0)
+                * scale
+            )
+            pdf.set_line_width(stroke_width)
+            style = "D"
+
+        diameter = radius * 2 * scale
+        x_position = x_offset + ((cx - radius) * scale)
+        y_top = drawing_bottom + ((geometry.height - (cy + radius)) * scale)
+
+        pdf.ellipse(x_position, _to_pdf_y(y_top), diameter, diameter, style=style)
 
