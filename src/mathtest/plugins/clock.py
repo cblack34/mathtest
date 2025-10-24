@@ -160,12 +160,14 @@ class _ClockData(BaseModel):
         return self
 
 
-def _polar_point(angle_degrees: float, radius: float, center: float) -> tuple[float, float]:
-    """Convert polar coordinates to Cartesian values relative to ``center``."""
+def _polar_point(
+    angle_degrees: float, radius: float, center_x: float, center_y: float
+) -> tuple[float, float]:
+    """Convert polar coordinates to Cartesian values relative to the center."""
 
     radians = math.radians(angle_degrees - 90.0)
-    x = center + radius * math.cos(radians)
-    y = center + radius * math.sin(radians)
+    x = center_x + radius * math.cos(radians)
+    y = center_y + radius * math.sin(radians)
     return (round(x, 4), round(y, 4))
 
 
@@ -180,21 +182,33 @@ def _clock_labels(is_24_hour: bool) -> Iterable[str]:
 def _render_clock_face(data: _ClockData) -> str:
     """Render an analog clock SVG honoring ``data``."""
 
-    size = 220
-    center = size / 2
-    outer_radius = 95.0
-    number_radius = 78.0
-    tick_outer_radius = number_radius - 8.0
-    tick_inner_radius = tick_outer_radius - 12.0
-    hour_hand_length = 58.0
-    minute_hand_length = 82.0
+    width = 240
+    height = 300
+    center_x = width / 2
+    center_y = 130.0
+    outer_radius = 100.0
+    bezel_radius = outer_radius + 6.0
+    number_radius = outer_radius - 16.0
+    tick_outer_radius = number_radius - 12.0
+    tick_inner_radius = tick_outer_radius - 14.0
+    hour_hand_length = 62.0
+    minute_hand_length = 92.0
 
-    drawing = svgwrite.Drawing(size=(f"{size}px", f"{size}px"))
-    drawing.viewbox(0, 0, size, size)
+    drawing = svgwrite.Drawing(size=(f"{width}px", f"{height}px"))
+    drawing.viewbox(0, 0, width, height)
 
     drawing.add(
         drawing.circle(
-            center=(center, center),
+            center=(center_x, center_y),
+            r=bezel_radius,
+            fill="#FFFFFF",
+            stroke="#000000",
+            stroke_width=3,
+        )
+    )
+    drawing.add(
+        drawing.circle(
+            center=(center_x, center_y),
             r=outer_radius,
             fill="#FFFFFF",
             stroke="#000000",
@@ -208,7 +222,7 @@ def _render_clock_face(data: _ClockData) -> str:
 
     for index, label in enumerate(labels):
         angle = index * step
-        text_x, text_y = _polar_point(angle, number_radius, center)
+        text_x, text_y = _polar_point(angle, number_radius, center_x, center_y)
         drawing.add(
             drawing.text(
                 label,
@@ -219,8 +233,8 @@ def _render_clock_face(data: _ClockData) -> str:
             )
         )
 
-        tick_start = _polar_point(angle, tick_inner_radius, center)
-        tick_end = _polar_point(angle, tick_outer_radius, center)
+        tick_start = _polar_point(angle, tick_inner_radius, center_x, center_y)
+        tick_end = _polar_point(angle, tick_outer_radius, center_x, center_y)
         drawing.add(
             drawing.line(
                 start=tick_start,
@@ -230,12 +244,16 @@ def _render_clock_face(data: _ClockData) -> str:
             )
         )
 
-    hour_end = _polar_point(data.hour_hand_angle, hour_hand_length, center)
-    minute_end = _polar_point(data.minute_hand_angle, minute_hand_length, center)
+    hour_end = _polar_point(
+        data.hour_hand_angle, hour_hand_length, center_x, center_y
+    )
+    minute_end = _polar_point(
+        data.minute_hand_angle, minute_hand_length, center_x, center_y
+    )
 
     drawing.add(
         drawing.line(
-            start=(center, center),
+            start=(center_x, center_y),
             end=hour_end,
             stroke="#000000",
             stroke_width=5,
@@ -243,7 +261,7 @@ def _render_clock_face(data: _ClockData) -> str:
     )
     drawing.add(
         drawing.line(
-            start=(center, center),
+            start=(center_x, center_y),
             end=minute_end,
             stroke="#000000",
             stroke_width=3,
@@ -252,9 +270,30 @@ def _render_clock_face(data: _ClockData) -> str:
 
     drawing.add(
         drawing.circle(
-            center=(center, center),
+            center=(center_x, center_y),
             r=4,
             fill="#000000",
+        )
+    )
+
+    answer_line_y = height - 60.0
+    answer_label_x = width * 0.14
+    answer_line_start = (answer_label_x + 80.0, answer_line_y)
+    answer_line_end = (width * 0.86, answer_line_y)
+    drawing.add(
+        drawing.text(
+            "Answer:",
+            insert=(answer_label_x, answer_line_y - 12),
+            font_size="18px",
+            font_family="FiraSans, sans-serif",
+        )
+    )
+    drawing.add(
+        drawing.line(
+            start=answer_line_start,
+            end=answer_line_end,
+            stroke="#000000",
+            stroke_width=3,
         )
     )
 
