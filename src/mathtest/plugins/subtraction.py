@@ -56,40 +56,58 @@ def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
         have consistent typography and spacing across plugins.
     """
 
-    width = 140
     height = 90
     margin = 12
     top_y = 32
     bottom_y = 64
     line_y = bottom_y + 6
+    font_size = 28
+    char_width = font_size * 0.6
 
-    drawing = svgwrite.Drawing(size=(f"{width}px", f"{height}px"))
-    drawing.viewbox(0, 0, width, height)
+    top_text = _format_operand(top)
+    bottom_operand = _format_operand(bottom)
+    operator_prefix_chars = len(f"{operator} ")
+
+    max_operand_chars = max(len(top_text), len(bottom_operand))
+    digit_span = max_operand_chars * char_width
+    left_padding = margin + operator_prefix_chars * char_width
+    digit_anchor_x = left_padding + digit_span
+    underline_start_x = digit_anchor_x - len(bottom_operand) * char_width
+    underline_end_x = digit_anchor_x
+    width = digit_anchor_x + margin
+
+    def _round(value: float) -> float:
+        return round(value, 4)
+
+    drawing = svgwrite.Drawing(
+        size=(f"{_round(width):.2f}px", f"{height}px"),
+    )
+    drawing.viewbox(0, 0, _round(width), height)
 
     text_style = {
-        "font_size": "28px",
+        "font_size": f"{font_size}px",
         "font_family": "FiraMono, monospace",
         "text_anchor": "end",
     }
 
     drawing.add(
         drawing.text(
-            _format_operand(top),
-            insert=(width - margin, top_y),
+            top_text,
+            insert=(_round(digit_anchor_x), top_y),
             **text_style,
         )
     )
     drawing.add(
         drawing.text(
-            f"{operator} {_format_operand(bottom)}",
-            insert=(width - margin, bottom_y),
+            f"{operator} {bottom_operand}",
+            insert=(_round(digit_anchor_x), bottom_y),
             **text_style,
         )
     )
     drawing.add(
         drawing.line(
-            start=(margin, line_y),
-            end=(width - margin, line_y),
+            start=(_round(underline_start_x), line_y),
+            end=(_round(underline_end_x), line_y),
             stroke="#000000",
             stroke_width=2,
         )
