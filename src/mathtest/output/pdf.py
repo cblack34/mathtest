@@ -303,9 +303,11 @@ class PdfOutputGenerator(OutputGenerator):
         if not config.include_student_header:
             return next_y
 
-        label_font_size = max(
-            float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE
-        )
+        title_font_size = float(config.title_font_size)
+        if title_font_size < MIN_HEADER_LABEL_FONT_SIZE:
+            label_font_size = MIN_HEADER_LABEL_FONT_SIZE
+        else:
+            label_font_size = title_font_size
         canvas.setFont(config.body_font, label_font_size)
         label_padding = label_font_size * HEADER_LABEL_PADDING_FACTOR
         underline_offset = label_font_size * HEADER_UNDERLINE_OFFSET_FACTOR
