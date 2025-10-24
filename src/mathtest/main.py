@@ -270,13 +270,12 @@ def _click_type_for(definition: ParameterDefinition) -> click.ParamType | type[A
     """Resolve the Click type for ``definition`` based on its declared type."""
 
     declared = definition.type
-    if declared is None:
-        return str
+    result: click.ParamType | type[Any] = str
     if isinstance(declared, str):
-        return _CLICK_TYPE_ALIASES.get(declared.lower(), str)
-    if isinstance(declared, type):
-        return _CLICK_TYPE_TYPES.get(declared, str)
-    return str
+        result = _CLICK_TYPE_ALIASES.get(declared.lower(), str)
+    elif isinstance(declared, type):
+        result = _CLICK_TYPE_TYPES.get(declared, str)
+    return result
 
 
 class _GenerateCommand(TyperCommand):
