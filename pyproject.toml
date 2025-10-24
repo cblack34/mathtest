@@ -8,10 +8,10 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "fpdf2>=2.8.1",
     "pydantic>=2.12.3",
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
-    "reportlab>=4.4.4",
     "svgwrite>=1.4.3",
     "typer>=0.20.0",
 ]
@@ -35,5 +35,4 @@ dev = [
     "pytest>=8.4.2",
     "ruff>=0.14.2",
     "types-pyyaml>=6.0.12.20250915",
-    "types-reportlab>=4.4.4.20250926",
 ]

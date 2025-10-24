@@ -27,10 +27,9 @@ def _build_text_svg(
 
 import pytest
 
-from reportlab.lib.pagesizes import letter
-
 from mathtest.interface import Problem
 from mathtest.output import PdfOutputGenerator
+from mathtest.output.pdf import LETTER_PAGE_SIZE
 from mathtest.plugins.addition import AdditionPlugin
 
 
@@ -161,7 +160,7 @@ def test_pdf_output_columns_layout(
     assert placements
     config = observed_config[0]
 
-    page_width, _ = letter
+    page_width, _ = LETTER_PAGE_SIZE
     column_spacing = config.column_spacing
     content_width = page_width - (2 * config.margin)
     available_width = content_width - column_spacing * (config.columns - 1)

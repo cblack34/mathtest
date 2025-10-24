@@ -21,7 +21,7 @@ assuming 20-30 hours/week.
 
 - **Tasks**:
     - Create repo structure: `mathtest/`, `tests/`, `pyproject.toml`.
-    - Configure `pyproject.toml`: Add dependencies (`typer`, `pyyaml`, `svgwrite`, `reportlab`, `pydantic`), entry
+    - Configure `pyproject.toml`: Add dependencies (`typer`, `pyyaml`, `svgwrite`, `fpdf2`, `pydantic`), entry
       points for addition/subtraction (e.g., `addition = mathtest.plugins.addition:AdditionPlugin`).
     - Implement `interface.py`: Define Protocols and Pydantic models as per latest artifact.
     - Use Codex to generate/review stubs.
@@ -56,7 +56,7 @@ assuming 20-30 hours/week.
 #### Phase 4: Output Implementation (1-2 days)
 
 - **Tasks**:
-    - Implement `output/pdf.py`: Basic PDF generation with `reportlab`, embedding SVGs and adding answer keys from
+    - Implement `output/pdf.py`: Basic PDF generation with `fpdf2`, embedding SVGs and adding answer keys from
       `Problem.data['answer']`.
     - Keep layout simple (e.g., vertical list, no grid for MVP).
     - Validate inputs with Pydantic.

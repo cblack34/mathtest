@@ -11,6 +11,16 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from ..interface import ParameterDefinition, Problem
 
 
+_VERTICAL_FONT_SIZE = 34
+_VERTICAL_HEIGHT_MULTIPLIERS = (
+    0.4,  # top padding
+    1.0,  # top glyph height
+    1.25,  # gap between baselines
+    0.35,  # underline offset
+    1.125,  # bottom padding for student workspace
+)
+
+
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     """Map external configuration keys to Pydantic field names.
 
@@ -66,16 +76,16 @@ def _render_vertical_problem(
         consistent.
     """
 
-    font_size = 34
+    font_size = _VERTICAL_FONT_SIZE
     char_width = font_size * 0.6
     margin = font_size * 0.45
-    top_padding = font_size * 0.4
-    baseline_gap = font_size * 1.25
-    underline_offset = font_size * 0.35
+    top_padding = font_size * _VERTICAL_HEIGHT_MULTIPLIERS[0]
+    baseline_gap = font_size * _VERTICAL_HEIGHT_MULTIPLIERS[2]
+    underline_offset = font_size * _VERTICAL_HEIGHT_MULTIPLIERS[3]
     # Provide extra writing room beneath the underline for student answers.
-    bottom_padding = font_size * 1.125
+    bottom_padding = font_size * _VERTICAL_HEIGHT_MULTIPLIERS[4]
 
-    top_y = top_padding + font_size
+    top_y = top_padding + (font_size * _VERTICAL_HEIGHT_MULTIPLIERS[1])
     bottom_y = top_y + baseline_gap
     line_y = bottom_y + underline_offset
     height = line_y + bottom_padding

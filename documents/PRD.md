@@ -37,7 +37,7 @@ formatting options, built for extensibility to a new UI (e.g., FastAPI) without 
     - Supports optional YAML configuration (`--config`) with `common` and per-plugin sections, overridden by CLI flags (
       e.g., `--addition-max-operand`).
 - **PDF Assembly**:
-    - Assembles SVGs into a PDF with customizable layout (grid, pages, answer keys) using a library like `reportlab`.
+    - Assembles SVGs into a PDF with customizable layout (grid, pages, answer keys) using a library like `fpdf2`.
 
 ##### 3.2 Reproducible Tests
 
@@ -122,7 +122,7 @@ root/
 - **Interface (`interface.py`)**:
     - Defines `MathProblemPlugin` with `generate_problem` (returns `Problem` based on params or `data`) and
       `get_parameters`.
-- **PDF Layout**: Uses `reportlab` to implement `--grid-cols`, `--questions-per-page`, etc.
+- **PDF Layout**: Uses `fpdf2` to implement `--grid-cols`, `--questions-per-page`, etc.
 
 ##### 4.3 Data Flow
 
@@ -133,10 +133,10 @@ root/
 ##### 4.4 Technology Stack
 
 - **Language**: Python
-- **Dependency Management**: UV with `pyproject.toml` (e.g., `typer`, `pyyaml`, `svgwrite`, `reportlab`, `pydantic`)
+- **Dependency Management**: UV with `pyproject.toml` (e.g., `typer`, `pyyaml`, `svgwrite`, `fpdf2`, `pydantic`)
 - **CLI**: Typer
 - **Rendering**: SVG (`svgwrite`)
-- **PDF**: `reportlab`
+- **PDF**: `fpdf2`
 - **Validation**: Pydantic (for models, schemas, and params)
 - **Testing**: pytest
 

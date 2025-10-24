@@ -15,11 +15,8 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
+from fpdf import FPDF
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from reportlab.lib import colors  # type: ignore[import-untyped]
-from reportlab.lib.pagesizes import letter  # type: ignore[import-untyped]
-from reportlab.lib.units import inch  # type: ignore[import-untyped]
-from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 from ..interface import OutputGenerator, Problem
 
@@ -30,6 +27,9 @@ NAME_FIELD_WIDTH_RATIO = 0.5
 DATE_FIELD_WIDTH_RATIO = 0.35
 HEADER_SPACING_MULTIPLIER = 1.6
 FLOAT_TOLERANCE = 1e-9
+POINTS_PER_INCH = 72.0
+LETTER_PAGE_SIZE = (612.0, 792.0)
+LETTER_PAGE_WIDTH, LETTER_PAGE_HEIGHT = LETTER_PAGE_SIZE
 
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -68,6 +68,26 @@ def _split_viewbox(value: str | None) -> tuple[float, float, float, float]:
         msg = f"Invalid viewBox declaration '{value}'"
         raise ValueError(msg)
     return tuple(float(part) for part in parts)  # type: ignore[return-value]
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    """Return an RGB tuple parsed from a hex ``value``."""
+
+    match = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", value.strip())
+    if match is None:
+        msg = f"Unsupported SVG color '{value}'"
+        raise ValueError(msg)
+
+    digits = match.group(1)
+    if len(digits) == 3:
+        digits = "".join(ch * 2 for ch in digits)
+    return tuple(int(digits[index : index + 2], 16) for index in range(0, 6, 2))
+
+
+def _to_pdf_y(value: float) -> float:
+    """Convert a bottom-origin coordinate to FPDF's top-origin system."""
+
+    return LETTER_PAGE_HEIGHT - value
 
 
 @dataclass(frozen=True)
@@ -200,23 +220,23 @@ class PdfOutputParams(BaseModel):
     def margin(self) -> float:
         """Return the page margin converted to points."""
 
-        return self.margin_inches * inch
+        return self.margin_inches * POINTS_PER_INCH
 
     @property
     def problem_spacing(self) -> float:
         """Return the spacing between problems converted to points."""
 
-        return self.problem_spacing_inches * inch
+        return self.problem_spacing_inches * POINTS_PER_INCH
 
     @property
     def column_spacing(self) -> float:
         """Return the spacing between columns converted to points."""
 
-        return self.column_spacing_inches * inch
+        return self.column_spacing_inches * POINTS_PER_INCH
 
 
 class PdfOutputGenerator(OutputGenerator):
-    """Render problems into a PDF document using ReportLab (MVP Phase 4)."""
+    """Render problems into a PDF document using FPDF (MVP Phase 4)."""
 
     def generate(self, problems: Sequence[Problem], params: Mapping[str, Any]) -> None:
         """Generate a PDF worksheet from ``problems``.
@@ -240,10 +260,11 @@ class PdfOutputGenerator(OutputGenerator):
             raise ValueError(msg)
 
         config.path.parent.mkdir(parents=True, exist_ok=True)
-        canvas = Canvas(str(config.path), pagesize=letter)
-        canvas.setPageCompression(0)
-        width, height = letter
-        content_width = width - (2 * config.margin)
+        pdf = FPDF(unit="pt", format=LETTER_PAGE_SIZE)
+        pdf.set_auto_page_break(auto=False)
+        pdf.set_compression(False)
+        page_width, page_height = LETTER_PAGE_SIZE
+        content_width = page_width - (2 * config.margin)
         if content_width <= 0:
             msg = "Configured margins leave no horizontal space for content"
             raise ValueError(msg)
@@ -259,7 +280,7 @@ class PdfOutputGenerator(OutputGenerator):
             config.margin + index * (column_width + config.column_spacing)
             for index in range(config.columns)
         ]
-        page_initial_top = self._page_initial_row_top(config, height)
+        page_initial_top = self._page_initial_row_top(config, page_height)
 
         answers: list[str] = []
         prepared_problems: list[_PreparedProblem] = []
@@ -387,18 +408,17 @@ class PdfOutputGenerator(OutputGenerator):
                         for placement in row.placements:
                             placement.top -= cumulative_shift
 
-        for page_index, page in enumerate(pages):
-            if page_index > 0:
-                canvas.showPage()
-            current_header_top = height - config.margin
+        for page in pages:
+            pdf.add_page()
+            current_header_top = page_height - config.margin
             if config.title:
                 current_header_top = self._draw_title(
-                    canvas, config, width, current_header_top
+                    pdf, config, page_width, current_header_top
                 )
             for row in page.rows:
                 for placement in row.placements:
                     self._draw_problem(
-                        canvas,
+                        pdf,
                         placement.prepared.svg_root,
                         placement.prepared.geometry,
                         config,
@@ -414,9 +434,9 @@ class PdfOutputGenerator(OutputGenerator):
             current_y = page_initial_top
 
         if config.include_answers and answers:
-            self._draw_answers(canvas, config, height, current_y, answers)
+            self._draw_answers(pdf, config, page_height, current_y, answers)
 
-        canvas.save()
+        pdf.output(str(config.path))
 
     def _page_initial_row_top(
         self, config: PdfOutputParams, page_height: float
@@ -439,22 +459,24 @@ class PdfOutputGenerator(OutputGenerator):
 
     def _draw_title(
         self,
-        canvas: Canvas,
+        pdf: FPDF,
         config: PdfOutputParams,
         page_width: float,
         current_y: float,
     ) -> float:
         """Render the document title and return the updated cursor position."""
 
-        canvas.setFont(config.body_font, config.title_font_size)
-        canvas.drawCentredString(page_width / 2, current_y, config.title)
+        pdf.set_font(config.body_font, size=config.title_font_size)
+        title_width = pdf.get_string_width(config.title)
+        title_x = max((page_width - title_width) / 2, 0.0)
+        pdf.text(title_x, _to_pdf_y(current_y), config.title)
         next_y = current_y - (config.title_font_size * 1.5)
 
         if not config.include_student_header:
             return current_y - self._title_block_height(config)
 
         label_font_size = max(float(config.title_font_size), MIN_HEADER_LABEL_FONT_SIZE)
-        canvas.setFont(config.body_font, label_font_size)
+        pdf.set_font(config.body_font, size=label_font_size)
         label_padding = label_font_size * HEADER_LABEL_PADDING_FACTOR
         underline_offset = label_font_size * HEADER_UNDERLINE_OFFSET_FACTOR
 
@@ -469,15 +491,21 @@ class PdfOutputGenerator(OutputGenerator):
 
         # ``draw_field`` relies on variables from the outer scope for layout and font
         # configuration: ``next_y``, ``line_y``, ``label_font_size``,
-        # ``config.body_font``, and ``canvas``.
+        # ``config.body_font``, and ``pdf``.
         def draw_field(label: str, field_x: float, field_width: float) -> None:
-            canvas.drawString(field_x, next_y, label)
-            label_width = canvas.stringWidth(label, config.body_font, label_font_size)
+            pdf.text(field_x, _to_pdf_y(next_y), label)
+            label_width = pdf.get_string_width(label)
             line_start = field_x + label_width + label_padding
             line_end = field_x + field_width
             line_start = min(line_start, line_end)
             if line_end > line_start:
-                canvas.line(line_start, line_y, line_end, line_y)
+                pdf.set_line_width(1.0)
+                pdf.line(
+                    line_start,
+                    _to_pdf_y(line_y),
+                    line_end,
+                    _to_pdf_y(line_y),
+                )
 
         draw_field("Name:", name_x, name_field_width)
         draw_field("Date:", date_x, date_field_width)
@@ -488,7 +516,7 @@ class PdfOutputGenerator(OutputGenerator):
 
     def _draw_answers(
         self,
-        canvas: Canvas,
+        pdf: FPDF,
         config: PdfOutputParams,
         page_height: float,
         current_y: float,
@@ -499,26 +527,30 @@ class PdfOutputGenerator(OutputGenerator):
         if config.answers_on_new_page or current_y < config.margin + (
             config.answer_font_size * 2
         ):
-            canvas.showPage()
+            pdf.add_page()
             current_y = page_height - config.margin
 
-        canvas.setFont(config.body_font, config.title_font_size)
-        canvas.drawString(config.margin, current_y, config.answer_title)
+        pdf.set_font(config.body_font, size=config.title_font_size)
+        pdf.text(config.margin, _to_pdf_y(current_y), config.answer_title)
         current_y -= config.title_font_size * 1.2
 
-        canvas.setFont(config.body_font, config.answer_font_size)
+        pdf.set_font(config.body_font, size=config.answer_font_size)
         line_height = config.answer_font_size * 1.4
         for index, answer in enumerate(answers, start=1):
             if current_y - line_height < config.margin:
-                canvas.showPage()
+                pdf.add_page()
                 current_y = page_height - config.margin
-                canvas.setFont(config.body_font, config.answer_font_size)
-            canvas.drawString(config.margin, current_y, f"{index}. {answer}")
+                pdf.set_font(config.body_font, size=config.answer_font_size)
+            pdf.text(
+                config.margin,
+                _to_pdf_y(current_y),
+                f"{index}. {answer}",
+            )
             current_y -= line_height
 
     def _draw_problem(
         self,
-        canvas: Canvas,
+        pdf: FPDF,
         svg_root: ET.Element,
         geometry: _SvgGeometry,
         config: PdfOutputParams,
@@ -533,18 +565,18 @@ class PdfOutputGenerator(OutputGenerator):
             tag = element.tag.split("}")[-1]
             if tag == "text":
                 self._draw_text(
-                    canvas, element, geometry, config, drawing_bottom, scale, x_offset
+                    pdf, element, geometry, config, drawing_bottom, scale, x_offset
                 )
             elif tag == "line":
                 self._draw_line(
-                    canvas, element, geometry, config, drawing_bottom, scale, x_offset
+                    pdf, element, geometry, config, drawing_bottom, scale, x_offset
                 )
             else:  # pragma: no cover - ignored SVG elements
                 continue
 
     def _draw_text(
         self,
-        canvas: Canvas,
+        pdf: FPDF,
         element: ET.Element,
         geometry: _SvgGeometry,
         config: PdfOutputParams,
@@ -552,7 +584,7 @@ class PdfOutputGenerator(OutputGenerator):
         scale: float,
         x_offset: float,
     ) -> None:
-        """Draw an SVG ``<text>`` element using the configured canvas."""
+        """Draw an SVG ``<text>`` element using the configured PDF context."""
 
         text_value = "".join(element.itertext())
         if not text_value:
@@ -569,21 +601,21 @@ class PdfOutputGenerator(OutputGenerator):
         font_size = _parse_svg_length(element.attrib.get("font-size"), 12.0) * scale
         anchor = element.attrib.get("text-anchor", "start")
 
-        canvas.setFont("Courier", font_size)
+        pdf.set_font("Courier", size=font_size)
         x_position = x_offset + (svg_x * scale)
         y_position = drawing_bottom + ((geometry.height - svg_y) * scale)
 
-        text_width = canvas.stringWidth(text_value, "Courier", font_size)
+        text_width = pdf.get_string_width(text_value)
         if anchor == "middle":
             x_position -= text_width / 2
         elif anchor == "end":
             x_position -= text_width
 
-        canvas.drawString(x_position, y_position, text_value)
+        pdf.text(x_position, _to_pdf_y(y_position), text_value)
 
     def _draw_line(
         self,
-        canvas: Canvas,
+        pdf: FPDF,
         element: ET.Element,
         geometry: _SvgGeometry,
         config: PdfOutputParams,
@@ -608,13 +640,13 @@ class PdfOutputGenerator(OutputGenerator):
             _parse_svg_length(element.attrib.get("stroke-width"), 1.0) * scale
         )
 
-        canvas.setStrokeColor(colors.HexColor(stroke))
-        canvas.setLineWidth(stroke_width)
+        pdf.set_draw_color(*_hex_to_rgb(stroke))
+        pdf.set_line_width(stroke_width)
 
-        canvas.line(
+        pdf.line(
             x_offset + (x1 * scale),
-            drawing_bottom + ((geometry.height - y1) * scale),
+            _to_pdf_y(drawing_bottom + ((geometry.height - y1) * scale)),
             x_offset + (x2 * scale),
-            drawing_bottom + ((geometry.height - y2) * scale),
+            _to_pdf_y(drawing_bottom + ((geometry.height - y2) * scale)),
         )
 

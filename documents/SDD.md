@@ -126,7 +126,7 @@ root/
         - `generate(problems: list[Problem], params: dict[str, any]) -> None`: Produces output (e.g., PDF) from
           `Problem` objects and layout params (e.g., `--grid-cols`).
 - **Implementation (`output/pdf.py`)**:
-    - Uses `reportlab` to create PDFs with grid layouts, multi-page support, and answer keys based on
+    - Uses `fpdf2` to create PDFs with grid layouts, multi-page support, and answer keys based on
       `--questions-per-page`, `--num-tests`, etc.
 - **Design Decisions**:
     - Interface-driven to allow future output types (e.g., HTML, DOCX) without changing the coordinator.
@@ -149,10 +149,10 @@ root/
 ##### 3.4 Technology Stack
 
 - **Language**: Python
-- **Dependency Management**: UV with `pyproject.toml` (e.g., `typer`, `pyyaml`, `svgwrite`, `reportlab`, `pydantic`)
+- **Dependency Management**: UV with `pyproject.toml` (e.g., `typer`, `pyyaml`, `svgwrite`, `fpdf2`, `pydantic`)
 - **CLI**: Typer
 - **Rendering**: SVG (`svgwrite`)
-- **PDF**: `reportlab`
+- **PDF**: `fpdf2`
 - **Validation**: Pydantic (for models, schemas, and params)
 - **Testing**: pytest
 
