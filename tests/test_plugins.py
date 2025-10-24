@@ -57,15 +57,15 @@ def test_clock_plugin_supports_accurate_hour_and_24_hour_modes() -> None:
     """Clock plugin should adjust the hour hand and support 24-hour dials."""
 
     accurate = ClockPlugin({
-        "random-seed": 1,
+        "random-seed": 4,
         "minute-interval": 30,
         "accurate-hour": True,
     })
     accurate_problem = accurate.generate_problem()
 
-    assert accurate_problem.data["hour"] == 3
+    assert accurate_problem.data["hour"] == 4
     assert accurate_problem.data["minute"] == 30
-    assert accurate_problem.data["hour_hand_angle"] == 105.0
+    assert accurate_problem.data["hour_hand_angle"] == 135.0
 
     military = ClockPlugin({
         "random-seed": 11,
