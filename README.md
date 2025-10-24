@@ -43,6 +43,18 @@ Additional configuration, such as operand ranges or RNG seeds, is surfaced via
 plugin-specific flags (for example `--addition-min-operand`). You can also pass
 a YAML configuration file with `--config path/to/settings.yaml`.
 
+### PDF layout configuration
+
+When using a YAML configuration file you can fine-tune the PDF layout. The
+`margin_inches` and `problem_spacing_inches` options continue to control the
+outer margins and vertical spacing. Two new parameters extend the layout model:
+
+- `columns` (default: 4) determines how many problems appear across each row.
+- `column_spacing_inches` sets the gutter between columns (default: 0.25).
+
+These values mirror the fields on `PdfOutputParams` and apply uniformly across
+the generated worksheet and answer key pages.
+
 ## Development
 
 The repository includes formatting, static analysis, and test tooling. Run
