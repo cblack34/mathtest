@@ -39,6 +39,8 @@ def test_pdf_output_creates_file_with_answer_key(
     pdf_bytes = output_path.read_bytes()
     assert b"Answer Key" in pdf_bytes
     assert b"1. " in pdf_bytes  # Basic confirmation that answers are listed
+    assert b"Name:" in pdf_bytes
+    assert b"Date:" in pdf_bytes
 
 
 def test_pdf_output_omits_answer_key_when_disabled(
@@ -54,6 +56,24 @@ def test_pdf_output_omits_answer_key_when_disabled(
     assert output_path.exists()
     pdf_bytes = output_path.read_bytes()
     assert b"Answer Key" not in pdf_bytes
+
+
+def test_pdf_output_can_disable_student_header(
+    tmp_path: Path, sample_problems: list
+) -> None:
+    """Student metadata fields should be optional via configuration."""
+
+    output_path = tmp_path / "worksheet.pdf"
+    generator = PdfOutputGenerator()
+
+    generator.generate(
+        sample_problems,
+        {"path": output_path, "include_student_header": False},
+    )
+
+    pdf_bytes = output_path.read_bytes()
+    assert b"Name:" not in pdf_bytes
+    assert b"Date:" not in pdf_bytes
 
 
 def test_pdf_output_requires_path(sample_problems: list) -> None:

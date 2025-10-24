@@ -122,6 +122,13 @@ class PdfOutputParams(BaseModel):
         default="Helvetica",
         description="Base font used for ancillary text such as titles and answers.",
     )
+    include_student_header: bool = Field(
+        default=True,
+        description=(
+            "Whether the worksheet should include student metadata fields such as "
+            "name and date beneath the main title."
+        ),
+    )
     title_font_size: int = Field(
         default=20,
         ge=8,
@@ -284,7 +291,26 @@ class PdfOutputGenerator(OutputGenerator):
 
         canvas.setFont(config.body_font, config.title_font_size)
         canvas.drawCentredString(page_width / 2, current_y, config.title)
-        return current_y - (config.title_font_size * 1.5)
+        next_y = current_y - (config.title_font_size * 1.5)
+
+        if not config.include_student_header:
+            return next_y
+
+        label_font_size = max(float(config.answer_font_size), 10.0)
+        canvas.setFont(config.body_font, label_font_size)
+        label_padding = label_font_size * 0.5
+        underline_offset = label_font_size * 0.3
+        available_right = page_width - config.margin
+
+        for label in ("Name:", "Date:"):
+            canvas.drawString(config.margin, next_y, label)
+            label_width = canvas.stringWidth(label, config.body_font, label_font_size)
+            line_start = config.margin + label_width + label_padding
+            line_y = next_y - underline_offset
+            canvas.line(line_start, line_y, available_right, line_y)
+            next_y -= label_font_size * 1.4
+
+        return next_y
 
     def _draw_answers(
         self,
