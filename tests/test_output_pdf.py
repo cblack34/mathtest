@@ -138,15 +138,16 @@ def test_pdf_output_columns_layout(
     content_width = page_width - (2 * config.margin)
     available_width = content_width - column_spacing * (config.columns - 1)
     column_width = available_width / config.columns
-    expected_offsets = [
+    column_left_offsets = [
         config.margin + index * (column_width + column_spacing)
         for index in range(config.columns)
     ]
+    expected_right_edges = [offset + column_width for offset in column_left_offsets]
 
     tolerance = 1e-3
     columns_used: set[int] = set()
     row_tops: list[float] = []
-    rows: dict[int, list[int]] = {}
+    rows: dict[int, list[tuple[int, float]]] = {}
     column_groups: dict[int, list[dict[str, float]]] = {
         index: [] for index in range(config.columns)
     }
@@ -159,20 +160,22 @@ def test_pdf_output_columns_layout(
         return len(row_tops) - 1
 
     for placement in placements:
+        right_edge = placement["x"] + placement["width"]
         column_index = min(
             range(config.columns),
-            key=lambda idx: abs(placement["x"] - expected_offsets[idx]),
+            key=lambda idx: abs(right_edge - expected_right_edges[idx]),
         )
-        assert abs(placement["x"] - expected_offsets[column_index]) < tolerance
+        assert abs(right_edge - expected_right_edges[column_index]) < tolerance
+        assert placement["x"] + tolerance >= column_left_offsets[column_index]
         columns_used.add(column_index)
         column_groups[column_index].append(placement)
         assert placement["width"] <= column_width + tolerance
 
         row_index = assign_row(placement["top"])
-        rows.setdefault(row_index, []).append(column_index)
+        rows.setdefault(row_index, []).append((column_index, right_edge))
 
     assert len(columns_used) == config.columns
-    assert rows[0] == list(range(config.columns))
+    assert [column for column, _ in rows[0]] == list(range(config.columns))
 
     for column_index, column_placements in column_groups.items():
         if not column_placements:
@@ -188,4 +191,7 @@ def test_pdf_output_columns_layout(
             assert gap + tolerance >= config.problem_spacing
 
     for row_columns in rows.values():
-        assert len(row_columns) == len(set(row_columns))
+        column_indices = [column for column, _ in row_columns]
+        assert len(column_indices) == len(set(column_indices))
+        for column_index, edge in row_columns:
+            assert abs(edge - expected_right_edges[column_index]) < tolerance

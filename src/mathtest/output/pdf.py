@@ -245,13 +245,14 @@ class PdfOutputGenerator(OutputGenerator):
             svg_root = ET.fromstring(problem.svg)
             geometry = _extract_geometry(svg_root)
             scale = min(1.0, column_width / geometry.width)
-            required_height = geometry.height * scale
+            scaled_height = geometry.height * scale
+            scaled_width = geometry.width * scale
 
-            if current_row_top - required_height < config.margin:
+            if current_row_top - scaled_height < config.margin:
                 if current_row_height > 0 and current_column > 0:
                     advance_row()
 
-            if current_row_top - required_height < config.margin:
+            if current_row_top - scaled_height < config.margin:
                 canvas.showPage()
                 current_row_top = height - config.margin
                 current_row_height = 0.0
@@ -260,15 +261,15 @@ class PdfOutputGenerator(OutputGenerator):
                     current_row_top = self._draw_title(
                         canvas, config, width, current_row_top
                     )
-                if current_row_top - required_height < config.margin:
+                if current_row_top - scaled_height < config.margin:
                     msg = "Problem geometry exceeds available page height"
                     raise ValueError(msg)
 
-            x_offset = column_offsets[current_column]
+            x_offset = column_offsets[current_column] + max(0, column_width - scaled_width)
             self._draw_problem(
                 canvas, svg_root, geometry, config, current_row_top, scale, x_offset
             )
-            current_row_height = max(current_row_height, required_height)
+            current_row_height = max(current_row_height, scaled_height)
             current_column += 1
 
             answer = problem.data.get("answer")
