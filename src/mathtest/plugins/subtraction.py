@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any, Mapping
 
-import svgwrite
+import svgwrite  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..interface import ParameterDefinition, Problem
@@ -134,7 +134,10 @@ class _SubtractionData(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operands: list[int] = Field(
-        ..., min_length=2, max_length=2, description="Pair of operands (minuend, subtrahend)."
+        ...,
+        min_length=2,
+        max_length=2,
+        description="Pair of operands (minuend, subtrahend).",
     )
     operator: str = Field(
         default="-",
@@ -237,7 +240,9 @@ class SubtractionPlugin:
             deterministic regeneration.
         """
 
-        minuend = self._random.randint(self._config.min_operand, self._config.max_operand)
+        minuend = self._random.randint(
+            self._config.min_operand, self._config.max_operand
+        )
         subtrahend = self._random.randint(
             self._config.min_operand, self._config.max_operand
         )
