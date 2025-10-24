@@ -246,7 +246,7 @@ class Coordinator:
 
         if deterministic_shuffle and shuffle_components:
             shuffle_seed = self._derive_shuffle_seed(
-                shuffle_components, generation_plan.copy()
+                shuffle_components, generation_plan
             )
             random.Random(shuffle_seed).shuffle(generation_plan)
         else:
