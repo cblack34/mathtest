@@ -9,6 +9,15 @@ import pytest
 from mathtest.plugins.addition import AdditionPlugin
 from mathtest.plugins.subtraction import SubtractionPlugin
 
+# Layout multipliers mirror the constants in the addition/subtraction renderers:
+# 0.4 (top padding) + 1.0 (font box) + 1.25 (baseline gap) + 0.35 (underline
+# offset) + 0.75 (bottom padding) = 3.75 total font units of height.
+_VERTICAL_FONT_SIZE = 34
+_VERTICAL_HEIGHT_MULTIPLIERS = (0.4, 1.0, 1.25, 0.35, 0.75)
+EXPECTED_VERTICAL_PROBLEM_HEIGHT = _VERTICAL_FONT_SIZE * sum(
+    _VERTICAL_HEIGHT_MULTIPLIERS
+)
+
 
 def test_addition_plugin_generates_expected_problem() -> None:
     """Addition plugin should produce deterministic output when seeded."""
@@ -23,7 +32,9 @@ def test_addition_plugin_generates_expected_problem() -> None:
     root = ET.fromstring(problem.svg)
     height_attr = root.attrib["height"]
     assert height_attr.endswith("px")
-    assert float(height_attr[:-2]) == pytest.approx(117.3, abs=0.1)
+    assert float(height_attr[:-2]) == pytest.approx(
+        EXPECTED_VERTICAL_PROBLEM_HEIGHT, abs=0.1
+    )
 
     recreated = AdditionPlugin.generate_from_data(problem.data)
     assert recreated.data == problem.data
@@ -42,7 +53,9 @@ def test_subtraction_plugin_generates_expected_problem() -> None:
     root = ET.fromstring(problem.svg)
     height_attr = root.attrib["height"]
     assert height_attr.endswith("px")
-    assert float(height_attr[:-2]) == pytest.approx(117.3, abs=0.1)
+    assert float(height_attr[:-2]) == pytest.approx(
+        EXPECTED_VERTICAL_PROBLEM_HEIGHT, abs=0.1
+    )
 
     recreated = SubtractionPlugin.generate_from_data(problem.data)
     assert recreated.data == problem.data

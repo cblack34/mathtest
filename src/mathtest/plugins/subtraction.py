@@ -71,7 +71,8 @@ def _render_vertical_problem(
     top_padding = font_size * 0.4
     baseline_gap = font_size * 1.25
     underline_offset = font_size * 0.35
-    bottom_padding = font_size * 0.45
+    # Provide extra writing room beneath the underline for student answers.
+    bottom_padding = font_size * 0.75
 
     top_y = top_padding + font_size
     bottom_y = top_y + baseline_gap
