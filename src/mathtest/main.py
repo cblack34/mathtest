@@ -5,10 +5,9 @@ from __future__ import annotations
 import inspect
 import json
 import random
+import sys
 from pathlib import Path
 from typing import Any, Iterable, Sequence
-
-import sys
 
 import click
 import typer

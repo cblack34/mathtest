@@ -9,7 +9,7 @@ a consistent orchestration layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from random import shuffle
+import random
 from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -233,7 +233,7 @@ class Coordinator:
         if not generation_plan:
             return GenerationResult(problems=problems, serialized=serialized)
 
-        shuffle(generation_plan)
+        random.shuffle(generation_plan)
 
         for plugin_name in generation_plan:
             plugin = plugin_instances[plugin_name]
