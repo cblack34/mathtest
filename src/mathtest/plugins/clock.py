@@ -21,6 +21,10 @@ def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, value in (params or {}).items():
         normalized[key.replace("-", "_")] = value
+    if "clock_24_hour" in normalized and "clock_12_hour" not in normalized:
+        # Activating 24-hour mode should implicitly disable the 12-hour toggle
+        # so callers do not have to pass both flags.
+        normalized["clock_12_hour"] = False
     return normalized
 
 
@@ -176,23 +180,25 @@ def _clock_labels(is_24_hour: bool) -> Iterable[str]:
 
     if is_24_hour:
         return (f"{value}" for value in range(24))
-    return (f"{value}" for value in range(1, 13))
+    labels = ["12"]
+    labels.extend(str(value) for value in range(1, 12))
+    return labels
 
 
 def _render_clock_face(data: _ClockData) -> str:
     """Render an analog clock SVG honoring ``data``."""
 
-    width = 240
-    height = 300
+    width = 260
+    height = 380
     center_x = width / 2
-    center_y = 130.0
-    outer_radius = 100.0
-    bezel_radius = outer_radius + 6.0
-    number_radius = outer_radius - 16.0
-    tick_outer_radius = number_radius - 12.0
+    center_y = 160.0
+    outer_radius = 110.0
+    bezel_radius = outer_radius + 10.0
+    number_radius = outer_radius - 10.0
+    tick_outer_radius = number_radius - 18.0
     tick_inner_radius = tick_outer_radius - 14.0
-    hour_hand_length = 62.0
-    minute_hand_length = 92.0
+    hour_hand_length = 72.0
+    minute_hand_length = 104.0
 
     drawing = svgwrite.Drawing(size=(f"{width}px", f"{height}px"))
     drawing.viewbox(0, 0, width, height)
@@ -201,9 +207,9 @@ def _render_clock_face(data: _ClockData) -> str:
         drawing.circle(
             center=(center_x, center_y),
             r=bezel_radius,
-            fill="#FFFFFF",
+            fill="#F0F0F0",
             stroke="#000000",
-            stroke_width=3,
+            stroke_width=4,
         )
     )
     drawing.add(
@@ -276,14 +282,14 @@ def _render_clock_face(data: _ClockData) -> str:
         )
     )
 
-    answer_line_y = height - 60.0
-    answer_label_x = width * 0.14
-    answer_line_start = (answer_label_x + 80.0, answer_line_y)
-    answer_line_end = (width * 0.86, answer_line_y)
+    answer_line_y = height - 40.0
+    answer_label_x = width * 0.12
+    answer_line_start = (answer_label_x + 90.0, answer_line_y)
+    answer_line_end = (width * 0.88, answer_line_y)
     drawing.add(
         drawing.text(
             "Answer:",
-            insert=(answer_label_x, answer_line_y - 12),
+            insert=(answer_label_x, answer_line_y - 14),
             font_size="18px",
             font_family="FiraSans, sans-serif",
         )
