@@ -101,7 +101,8 @@ class SerializedProblem(BaseModel):
             Serialized payload ready to be dumped as JSON.
         """
 
-        return cls(type=plugin_name, data=dict(problem.data))
+        payload = {"problem_type": plugin_name, "data": dict(problem.data)}
+        return cls.model_validate(payload)
 
 
 class GenerationRequest(BaseModel):
