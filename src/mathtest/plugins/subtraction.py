@@ -207,21 +207,25 @@ class SubtractionPlugin:
                 name="min-operand",
                 default=0,
                 description="Minimum operand value (inclusive) for random subtraction problems.",
+                type=int,
             ),
             ParameterDefinition(
                 name="max-operand",
                 default=10,
                 description="Maximum operand value (inclusive) for random subtraction problems.",
-            ),
-            ParameterDefinition(
-                name="allow-negative-result",
-                default=False,
-                description="Allow randomly generated problems to have negative answers.",
+                type=int,
             ),
             ParameterDefinition(
                 name="random-seed",
                 default=None,
                 description="Optional seed for deterministic random generation during testing.",
+                type=int,
+            ),
+            ParameterDefinition(
+                name="allow-negative-result",
+                default=False,
+                description="Allow randomly generated problems to have negative answers.",
+                type=bool,
             ),
         ]
 

@@ -204,16 +204,19 @@ class AdditionPlugin:
                 name="min-operand",
                 default=0,
                 description="Minimum operand value (inclusive) for random addition problems.",
+                type=int,
             ),
             ParameterDefinition(
                 name="max-operand",
                 default=10,
                 description="Maximum operand value (inclusive) for random addition problems.",
+                type=int,
             ),
             ParameterDefinition(
                 name="random-seed",
                 default=None,
                 description="Optional seed for deterministic random generation during testing.",
+                type=int,
             ),
         ]
 

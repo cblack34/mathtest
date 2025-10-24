@@ -6,9 +6,9 @@ output generators loosely coupled as described in the PRD/SDD documents.
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Mapping, Protocol, Sequence, Type, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class Problem(BaseModel):
@@ -43,6 +43,20 @@ class ParameterDefinition(BaseModel):
     name: str = Field(..., description="Parameter identifier such as 'max-operand'")
     default: Any = Field(..., description="Default value applied when unspecified")
     description: str = Field(..., description="Human friendly help text for the CLI")
+    type: Type[Any] | str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("type", "value_type"),
+        description=(
+            "Optional type hint used by dynamic surfaces such as the CLI to coerce "
+            "values. Accepts Python types or string aliases (e.g., 'int')."
+        ),
+    )
+
+    @property
+    def value_type(self) -> Type[Any] | str | None:
+        """Backward compatibility alias exposing ``type`` under the old name."""
+
+        return self.type
 
 
 @runtime_checkable
