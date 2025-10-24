@@ -261,7 +261,7 @@ class PdfOutputGenerator(OutputGenerator):
             answers.append(str(answer))
 
         if current_row_height > 0:
-            current_y = current_row_top - current_row_height - config.problem_spacing
+            current_y = current_row_top - current_row_height
         else:
             current_y = current_row_top
 
