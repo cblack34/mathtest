@@ -43,13 +43,22 @@ def _format_operand(value: int) -> str:
     return f"({value})" if value < 0 else str(value)
 
 
-def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
+def _render_vertical_problem(
+    top: int,
+    bottom: int,
+    operator: str,
+    minimum_digit_chars: int | None = None,
+) -> str:
     """Create a vertically stacked arithmetic SVG illustration.
 
     Args:
         top: The top operand shown in the vertical layout.
         bottom: The bottom operand shown beneath the operator.
         operator: The arithmetic operator symbol to display between operands.
+        minimum_digit_chars: Optional lower bound for the operand character
+            count when measuring layout width. This keeps rendered problems
+            consistent across varying operand lengths so downstream scaling
+            does not change font sizes.
 
     Returns:
         An SVG string matching the dimensions and typography outlined in
@@ -69,7 +78,8 @@ def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
     bottom_operand = _format_operand(bottom)
     operator_prefix_chars = len(f"{operator} ")
 
-    max_operand_chars = max(len(top_text), len(bottom_operand))
+    min_char_target = max(minimum_digit_chars or 0, 0)
+    max_operand_chars = max(len(top_text), len(bottom_operand), min_char_target)
     digit_span = max_operand_chars * char_width
     left_padding = margin + operator_prefix_chars * char_width
     digit_anchor_x = left_padding + digit_span
@@ -161,6 +171,13 @@ class _AdditionData(BaseModel):
         default=None,
         description="Expected solution; calculated when omitted to keep JSON concise.",
     )
+    min_digit_chars: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "Optional minimum character width used to render the original SVG."
+        ),
+    )
 
     @model_validator(mode="after")
     def validate_answer(self) -> "_AdditionData":
@@ -201,6 +218,10 @@ class AdditionPlugin:
         self._random = random.Random()
         if self._config.random_seed is not None:
             self._random.seed(self._config.random_seed)
+        self._min_digit_chars = max(
+            len(_format_operand(self._config.min_operand)),
+            len(_format_operand(self._config.max_operand)),
+        )
 
     @property
     def name(self) -> str:
@@ -254,11 +275,17 @@ class AdditionPlugin:
         )
         answer = augend + addend
 
-        svg = _render_vertical_problem(augend, addend, "+")
+        svg = _render_vertical_problem(
+            augend,
+            addend,
+            "+",
+            minimum_digit_chars=self._min_digit_chars,
+        )
         data = {
             "operands": [augend, addend],
             "operator": "+",
             "answer": answer,
+            "min_digit_chars": self._min_digit_chars,
         }
         return Problem(svg=svg, data=data)
 
@@ -284,6 +311,17 @@ class AdditionPlugin:
             raise ValueError("Invalid addition problem data") from exc
 
         top, bottom = validated.operands
-        svg = _render_vertical_problem(top, bottom, "+")
+        min_digit_chars = validated.min_digit_chars
+        if min_digit_chars is None:
+            min_digit_chars = max(
+                len(_format_operand(value)) for value in validated.operands
+            )
+
+        svg = _render_vertical_problem(
+            top,
+            bottom,
+            "+",
+            minimum_digit_chars=min_digit_chars,
+        )
         payload = validated.model_dump()
         return Problem(svg=svg, data=payload)

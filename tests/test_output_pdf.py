@@ -5,6 +5,26 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+
+def _build_text_svg(
+    width: int,
+    height: int,
+    text: str,
+    *,
+    font_size: int = 12,
+    x: int = 2,
+    y: int | None = None,
+) -> str:
+    """Create a minimal SVG with a single text element for layout tests."""
+
+    baseline_y = y if y is not None else height - 6
+    return (
+        "<svg xmlns='http://www.w3.org/2000/svg' "
+        f"width='{width}' height='{height}' viewBox='0 0 {width} {height}'>"
+        f"<text x='{x}' y='{baseline_y}' font-size='{font_size}'>{text}</text>"
+        "</svg>"
+    )
+
 import pytest
 
 from reportlab.lib.pagesizes import letter
@@ -93,12 +113,7 @@ def test_pdf_output_columns_layout(
     plugin = AdditionPlugin({"random_seed": 987})
     problems = [plugin.generate_problem() for _ in range(8)]
     narrow_problem = Problem(
-        svg=(
-            "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='24' "
-            "viewBox='0 0 40 24'>"
-            "<text x='2' y='18' font-size='12'>1 + 1</text>"
-            "</svg>"
-        ),
+        svg=_build_text_svg(40, 24, "1 + 1"),
         data={"answer": 2},
     )
     problems.append(narrow_problem)
@@ -131,6 +146,7 @@ def test_pdf_output_columns_layout(
                 "width": geometry.width * scale,
                 "height": scaled_height,
                 "original_width": geometry.width,
+                "problem_index": len(placements),
             }
         )
         original_draw_problem(
@@ -208,6 +224,17 @@ def test_pdf_output_columns_layout(
         assert len(column_indices) == len(set(column_indices))
         for column_index, edge in row_columns:
             assert abs(edge - expected_right_edges[column_index]) < tolerance
+
+    narrow_index = len(problems) - 1
+    plugin_scales = [
+        placement["width"] / placement["original_width"]
+        for placement in placements
+        if placement["problem_index"] != narrow_index
+    ]
+    assert plugin_scales, "Expected plugin placements for scale comparison"
+    reference_scale = plugin_scales[0]
+    for scale in plugin_scales[1:]:
+        assert abs(scale - reference_scale) < tolerance
 
     narrow_placements = [
         placement

@@ -29,6 +29,7 @@ HEADER_UNDERLINE_OFFSET_FACTOR = 0.3
 NAME_FIELD_WIDTH_RATIO = 0.5
 DATE_FIELD_WIDTH_RATIO = 0.35
 HEADER_SPACING_MULTIPLIER = 1.6
+FLOAT_TOLERANCE = 1e-9
 
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -270,7 +271,7 @@ class PdfOutputGenerator(OutputGenerator):
                     raise ValueError(msg)
 
             remaining_width = column_width - scaled_width
-            if abs(remaining_width) <= 1e-9:
+            if abs(remaining_width) <= FLOAT_TOLERANCE:
                 remaining_width = 0.0
 
             x_offset = column_offsets[current_column] + max(0.0, remaining_width)
