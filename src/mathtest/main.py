@@ -52,6 +52,20 @@ def _collect_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
 
 _PLUGIN_PARAMETERS = _collect_plugin_parameters()
 
+_CLICK_TYPE_ALIASES: dict[str, click.ParamType | type[Any]] = {
+    "int": int,
+    "float": float,
+    "bool": click.BOOL,
+    "str": str,
+}
+
+_CLICK_TYPE_TYPES: dict[type[Any], click.ParamType | type[Any]] = {
+    bool: click.BOOL,
+    int: int,
+    float: float,
+    str: str,
+}
+
 
 def _option_storage_key(plugin_name: str, parameter_name: str) -> str:
     """Create the internal storage key for a plugin CLI option.
@@ -166,7 +180,7 @@ def _build_plugin_requests(params: dict[str, Any]) -> list[PluginRequest]:
 
     requests: list[PluginRequest] = []
     for plugin_name in _PLUGIN_PARAMETERS:
-        quantity = int(params.get(plugin_name, 0))
+        quantity = params.get(plugin_name, 0)
         requests.append(PluginRequest(name=plugin_name, quantity=quantity))
     return requests
 
@@ -259,20 +273,9 @@ def _click_type_for(definition: ParameterDefinition) -> click.ParamType | type[A
     if declared is None:
         return str
     if isinstance(declared, str):
-        alias = declared.lower()
-        if alias == "int":
-            return int
-        if alias == "float":
-            return float
-        if alias == "bool":
-            return click.BOOL
-        if alias == "str":
-            return str
-        return str
-    if declared is bool:
-        return click.BOOL
-    if declared in {int, float, str}:
-        return declared
+        return _CLICK_TYPE_ALIASES.get(declared.lower(), str)
+    if isinstance(declared, type):
+        return _CLICK_TYPE_TYPES.get(declared, str)
     return str
 
 

@@ -44,7 +44,7 @@ class ParameterDefinition(BaseModel):
     default: Any = Field(..., description="Default value applied when unspecified")
     description: str = Field(..., description="Human friendly help text for the CLI")
     value_type: Type[Any] | str | None = Field(
-        default=str,
+        default=None,
         alias="type",
         validation_alias=AliasChoices("type", "value_type"),
         description=(
