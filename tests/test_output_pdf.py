@@ -225,6 +225,13 @@ def test_pdf_output_columns_layout(
         for column_index, edge in row_columns:
             assert abs(edge - expected_right_edges[column_index]) < tolerance
 
+    highest_top = max(placement["top"] for placement in placements)
+    lowest_bottom = min(placement["bottom"] for placement in placements)
+    assert abs(lowest_bottom - config.margin) < tolerance
+    available_vertical = highest_top - config.margin
+    used_vertical = highest_top - lowest_bottom
+    assert abs(available_vertical - used_vertical) < tolerance
+
     narrow_index = len(problems) - 1
     plugin_scales = [
         placement["width"] / placement["original_width"]
