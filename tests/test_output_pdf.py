@@ -9,6 +9,7 @@ import pytest
 
 from reportlab.lib.pagesizes import letter
 
+from mathtest.interface import Problem
 from mathtest.output import PdfOutputGenerator
 from mathtest.plugins.addition import AdditionPlugin
 
@@ -91,6 +92,16 @@ def test_pdf_output_columns_layout(
 
     plugin = AdditionPlugin({"random_seed": 987})
     problems = [plugin.generate_problem() for _ in range(8)]
+    narrow_problem = Problem(
+        svg=(
+            "<svg xmlns='http://www.w3.org/2000/svg' width='40' height='24' "
+            "viewBox='0 0 40 24'>"
+            "<text x='2' y='18' font-size='12'>1 + 1</text>"
+            "</svg>"
+        ),
+        data={"answer": 2},
+    )
+    problems.append(narrow_problem)
 
     generator = PdfOutputGenerator()
     output_path = tmp_path / "columns.pdf"
@@ -119,6 +130,7 @@ def test_pdf_output_columns_layout(
                 "bottom": current_y - scaled_height,
                 "width": geometry.width * scale,
                 "height": scaled_height,
+                "original_width": geometry.width,
             }
         )
         original_draw_problem(
@@ -173,6 +185,7 @@ def test_pdf_output_columns_layout(
 
         row_index = assign_row(placement["top"])
         rows.setdefault(row_index, []).append((column_index, right_edge))
+        placement["column_index"] = column_index
 
     assert len(columns_used) == config.columns
     assert [column for column, _ in rows[0]] == list(range(config.columns))
@@ -195,3 +208,21 @@ def test_pdf_output_columns_layout(
         assert len(column_indices) == len(set(column_indices))
         for column_index, edge in row_columns:
             assert abs(edge - expected_right_edges[column_index]) < tolerance
+
+    narrow_placements = [
+        placement
+        for placement in placements
+        if placement["original_width"] < column_width - tolerance
+    ]
+    assert narrow_placements, "Expected at least one narrow problem for scaling test"
+    for placement in narrow_placements:
+        assert abs(placement["width"] - column_width) < tolerance
+        column_index = placement["column_index"]
+        assert (
+            abs(
+                placement["x"]
+                + placement["width"]
+                - expected_right_edges[column_index]
+            )
+            < tolerance
+        )
