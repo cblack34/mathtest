@@ -23,6 +23,13 @@ from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 from ..interface import OutputGenerator, Problem
 
+MIN_HEADER_LABEL_FONT_SIZE = 10.0
+HEADER_LABEL_PADDING_FACTOR = 0.5
+HEADER_UNDERLINE_OFFSET_FACTOR = 0.3
+NAME_FIELD_WIDTH_RATIO = 0.5
+DATE_FIELD_WIDTH_RATIO = 0.35
+HEADER_SPACING_MULTIPLIER = 1.6
+
 
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return ``params`` with CLI-friendly keys normalized to snake_case."""
@@ -296,14 +303,16 @@ class PdfOutputGenerator(OutputGenerator):
         if not config.include_student_header:
             return next_y
 
-        label_font_size = max(float(config.answer_font_size), 10.0)
+        label_font_size = max(
+            float(config.answer_font_size), MIN_HEADER_LABEL_FONT_SIZE
+        )
         canvas.setFont(config.body_font, label_font_size)
-        label_padding = label_font_size * 0.5
-        underline_offset = label_font_size * 0.3
+        label_padding = label_font_size * HEADER_LABEL_PADDING_FACTOR
+        underline_offset = label_font_size * HEADER_UNDERLINE_OFFSET_FACTOR
 
         content_width = max(page_width - (2 * config.margin), 0.0)
-        name_field_width = content_width * 0.5
-        date_field_width = content_width * 0.35
+        name_field_width = content_width * NAME_FIELD_WIDTH_RATIO
+        date_field_width = content_width * DATE_FIELD_WIDTH_RATIO
         gap_width = max(content_width - name_field_width - date_field_width, 0.0)
 
         name_x = config.margin
@@ -322,7 +331,7 @@ class PdfOutputGenerator(OutputGenerator):
         draw_field("Name:", name_x, name_field_width)
         draw_field("Date:", date_x, date_field_width)
 
-        next_y -= label_font_size * 1.6
+        next_y -= label_font_size * HEADER_SPACING_MULTIPLIER
 
         return next_y
 
@@ -457,3 +466,4 @@ class PdfOutputGenerator(OutputGenerator):
             x_offset + (x2 * scale),
             drawing_bottom + ((geometry.height - y2) * scale),
         )
+
