@@ -265,7 +265,7 @@ class PdfOutputGenerator(OutputGenerator):
                     msg = "Problem geometry exceeds available page height"
                     raise ValueError(msg)
 
-            x_offset = column_offsets[current_column] + (column_width - scaled_width)
+            x_offset = column_offsets[current_column] + max(0, column_width - scaled_width)
             self._draw_problem(
                 canvas, svg_root, geometry, config, current_row_top, scale, x_offset
             )
