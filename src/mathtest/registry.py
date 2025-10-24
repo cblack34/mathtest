@@ -104,6 +104,9 @@ class PluginRegistry:
         discovered: dict[str, type[MathProblemPlugin]] = {}
         for entry_point in metadata.entry_points(group=self._entry_point_group):
             plugin_name = entry_point.name
+            if plugin_name in discovered:
+                msg = f"Duplicate plugin name '{plugin_name}' discovered in entry points"
+                raise PluginRegistryError(msg)
             plugin_obj = entry_point.load()
             plugin_cls = self._validate_plugin(plugin_name, plugin_obj)
             discovered[plugin_name] = plugin_cls

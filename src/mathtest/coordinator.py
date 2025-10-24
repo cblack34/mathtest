@@ -255,7 +255,7 @@ class Coordinator:
         self._apply_parameter_set(merged, request.yaml_parameters, plugin_name)
         self._apply_parameter_set(merged, request.cli_parameters, plugin_name)
         if overrides:
-            merged.update(dict(overrides))
+            merged.update(overrides)
         return merged
 
     @staticmethod
