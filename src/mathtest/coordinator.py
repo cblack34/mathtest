@@ -101,7 +101,7 @@ class SerializedProblem(BaseModel):
             Serialized payload ready to be dumped as JSON.
         """
 
-        return cls(problem_type=plugin_name, data=dict(problem.data))
+        return cls(type=plugin_name, data=dict(problem.data))
 
 
 class GenerationRequest(BaseModel):
@@ -195,7 +195,9 @@ class Coordinator:
                 raise CoordinatorError(msg) from exc
 
             problems.append(problem)
-            serialized.append(SerializedProblem.from_problem(entry.plugin_name, problem))
+            serialized.append(
+                SerializedProblem.from_problem(entry.plugin_name, problem)
+            )
         return GenerationResult(problems=problems, serialized=serialized)
 
     def _generate_from_plugins(self, request: GenerationRequest) -> GenerationResult:

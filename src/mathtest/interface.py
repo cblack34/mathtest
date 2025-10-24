@@ -67,6 +67,9 @@ class MathProblemPlugin(Protocol):
     so the coordinator can supply merged configuration (SDD §3.2.3).
     """
 
+    def __init__(self, params: Mapping[str, Any] | None = None) -> None:
+        """Initialize the plugin with optional merged configuration."""
+
     @property
     def name(self) -> str:
         """Unique plugin name, e.g., ``'addition'``."""

@@ -203,13 +203,17 @@ def _static_generate_options() -> list[click.Option]:
     return [
         click.Option(
             ["--config", "-c"],
-            type=click.Path(path_type=Path, exists=True, dir_okay=False, file_okay=True),
+            type=click.Path(
+                path_type=Path, exists=True, dir_okay=False, file_okay=True
+            ),
             default=None,
             help="Path to a YAML configuration file providing default parameters.",
         ),
         click.Option(
             ["--json-input"],
-            type=click.Path(path_type=Path, exists=True, dir_okay=False, file_okay=True),
+            type=click.Path(
+                path_type=Path, exists=True, dir_okay=False, file_okay=True
+            ),
             default=None,
             help="Optional JSON file containing serialized problems to reproduce.",
         ),
@@ -315,7 +319,9 @@ def generate(
     plugin_requests = _build_plugin_requests(plugin_options)
     json_entries = _load_json_input(json_input) if json_input else None
 
-    if json_entries is None and not any(request.quantity > 0 for request in plugin_requests):
+    if json_entries is None and not any(
+        request.quantity > 0 for request in plugin_requests
+    ):
         raise typer.BadParameter(
             "Specify at least one plugin quantity or provide --json-input.",
             param_hint="--addition/--subtraction or --json-input",
@@ -347,9 +353,7 @@ def _generate_entrypoint(**kwargs) -> None:
 
 # Register the command with Typer using the custom Click command class.
 _GENERATE_HELP = (
-    inspect.cleandoc(generate.__doc__ or "").splitlines()[0]
-    if generate.__doc__
-    else ""
+    inspect.cleandoc(generate.__doc__ or "").splitlines()[0] if generate.__doc__ else ""
 )
 app.registered_commands.append(
     CommandInfo(

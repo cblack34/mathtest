@@ -38,7 +38,9 @@ class _EntryPoint:
         return self._plugin
 
 
-def test_registry_rejects_duplicate_entry_point_names(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_rejects_duplicate_entry_point_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Registry initialization should fail when duplicate names are discovered."""
 
     def fake_entry_points(*, group: str):
@@ -54,4 +56,3 @@ def test_registry_rejects_duplicate_entry_point_names(monkeypatch: pytest.Monkey
         registry.PluginRegistry()
 
     assert "Duplicate plugin name" in str(excinfo.value)
-

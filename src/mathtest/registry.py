@@ -68,7 +68,9 @@ class PluginRegistry:
             msg = f"Unknown plugin '{plugin_name}'"
             raise PluginRegistryError(msg) from exc
 
-    def create(self, plugin_name: str, params: Mapping[str, Any] | None = None) -> MathProblemPlugin:
+    def create(
+        self, plugin_name: str, params: Mapping[str, Any] | None = None
+    ) -> MathProblemPlugin:
         """Instantiate a plugin with optional configuration.
 
         Args:
@@ -92,9 +94,7 @@ class PluginRegistry:
             raise PluginRegistryError(msg) from exc
 
         if not isinstance(instance, MathProblemPlugin):
-            msg = (
-                f"Plugin '{plugin_name}' does not implement the MathProblemPlugin interface"
-            )
+            msg = f"Plugin '{plugin_name}' does not implement the MathProblemPlugin interface"
             raise PluginRegistryError(msg)
         return instance
 
@@ -105,7 +105,9 @@ class PluginRegistry:
         for entry_point in metadata.entry_points(group=self._entry_point_group):
             plugin_name = entry_point.name
             if plugin_name in discovered:
-                msg = f"Duplicate plugin name '{plugin_name}' discovered in entry points"
+                msg = (
+                    f"Duplicate plugin name '{plugin_name}' discovered in entry points"
+                )
                 raise PluginRegistryError(msg)
             plugin_obj = entry_point.load()
             plugin_cls = self._validate_plugin(plugin_name, plugin_obj)
@@ -121,7 +123,11 @@ class PluginRegistry:
             msg = f"Entry point '{plugin_name}' does not reference a class"
             raise PluginRegistryError(msg)
 
-        required_attributes = ("get_parameters", "generate_problem", "generate_from_data")
+        required_attributes = (
+            "get_parameters",
+            "generate_problem",
+            "generate_from_data",
+        )
         for attribute in required_attributes:
             if not hasattr(plugin_obj, attribute):
                 msg = f"Plugin '{plugin_name}' missing required attribute '{attribute}'"

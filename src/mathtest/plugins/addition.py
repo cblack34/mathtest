@@ -5,7 +5,7 @@ from __future__ import annotations
 import random
 from typing import Any, Mapping
 
-import svgwrite
+import svgwrite  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from ..interface import ParameterDefinition, Problem
@@ -228,8 +228,12 @@ class AdditionPlugin:
             payload required for deterministic regeneration.
         """
 
-        augend = self._random.randint(self._config.min_operand, self._config.max_operand)
-        addend = self._random.randint(self._config.min_operand, self._config.max_operand)
+        augend = self._random.randint(
+            self._config.min_operand, self._config.max_operand
+        )
+        addend = self._random.randint(
+            self._config.min_operand, self._config.max_operand
+        )
         answer = augend + addend
 
         svg = _render_vertical_problem(augend, addend, "+")

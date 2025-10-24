@@ -1,9 +1,10 @@
 """PDF output generator for MVP Phase 4.
 
 This module implements the Phase 4 requirement outlined in ``documents/MVP.md``
-by providing a simple PDF renderer that consumes :class:`~mathtest.interface.Problem`
-objects. The implementation focuses on the addition and subtraction plugins
-shipped in the MVP while keeping the code extensible for future problem types.
+by providing a simple PDF renderer that consumes
+:class:`~mathtest.interface.Problem` objects. The implementation focuses on the
+addition and subtraction plugins shipped in the MVP while keeping the code
+extensible for future problem types.
 """
 
 from __future__ import annotations
@@ -15,10 +16,10 @@ from typing import Any, Iterable, Mapping, Sequence
 import xml.etree.ElementTree as ET
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.pdfgen.canvas import Canvas
+from reportlab.lib import colors  # type: ignore[import-untyped]
+from reportlab.lib.pagesizes import letter  # type: ignore[import-untyped]
+from reportlab.lib.units import inch  # type: ignore[import-untyped]
+from reportlab.pdfgen.canvas import Canvas  # type: ignore[import-untyped]
 
 from ..interface import OutputGenerator, Problem
 
@@ -194,9 +195,7 @@ class PdfOutputGenerator(OutputGenerator):
 
             answer = problem.data.get("answer")
             if answer is None:
-                msg = (
-                    "Problem data missing 'answer' field required for the answer key"
-                )
+                msg = "Problem data missing 'answer' field required for the answer key"
                 raise ValueError(msg)
             answers.append(str(answer))
 
@@ -206,7 +205,11 @@ class PdfOutputGenerator(OutputGenerator):
         canvas.save()
 
     def _draw_title(
-        self, canvas: Canvas, config: PdfOutputParams, page_width: float, current_y: float
+        self,
+        canvas: Canvas,
+        config: PdfOutputParams,
+        page_width: float,
+        current_y: float,
     ) -> float:
         """Render the document title and return the updated cursor position."""
 
@@ -224,7 +227,9 @@ class PdfOutputGenerator(OutputGenerator):
     ) -> None:
         """Render the answer key using the collected ``answers``."""
 
-        if config.answers_on_new_page or current_y < config.margin + (config.answer_font_size * 2):
+        if config.answers_on_new_page or current_y < config.margin + (
+            config.answer_font_size * 2
+        ):
             canvas.showPage()
             current_y = page_height - config.margin
 
@@ -257,9 +262,13 @@ class PdfOutputGenerator(OutputGenerator):
         for element in svg_root:
             tag = element.tag.split("}")[-1]
             if tag == "text":
-                self._draw_text(canvas, element, geometry, config, drawing_bottom, scale)
+                self._draw_text(
+                    canvas, element, geometry, config, drawing_bottom, scale
+                )
             elif tag == "line":
-                self._draw_line(canvas, element, geometry, config, drawing_bottom, scale)
+                self._draw_line(
+                    canvas, element, geometry, config, drawing_bottom, scale
+                )
             else:  # pragma: no cover - ignored SVG elements
                 continue
 
@@ -282,7 +291,9 @@ class PdfOutputGenerator(OutputGenerator):
             svg_x = float(element.attrib.get("x", "0"))
             svg_y = float(element.attrib.get("y", "0"))
         except ValueError as exc:
-            raise ValueError("SVG text element contains non-numeric coordinates") from exc
+            raise ValueError(
+                "SVG text element contains non-numeric coordinates"
+            ) from exc
 
         font_size = _parse_svg_length(element.attrib.get("font-size"), 12.0) * scale
         anchor = element.attrib.get("text-anchor", "start")
@@ -316,10 +327,14 @@ class PdfOutputGenerator(OutputGenerator):
             x2 = float(element.attrib.get("x2", "0"))
             y2 = float(element.attrib.get("y2", "0"))
         except ValueError as exc:
-            raise ValueError("SVG line element contains non-numeric coordinates") from exc
+            raise ValueError(
+                "SVG line element contains non-numeric coordinates"
+            ) from exc
 
         stroke = element.attrib.get("stroke", "#000000")
-        stroke_width = _parse_svg_length(element.attrib.get("stroke-width"), 1.0) * scale
+        stroke_width = (
+            _parse_svg_length(element.attrib.get("stroke-width"), 1.0) * scale
+        )
 
         canvas.setStrokeColor(colors.HexColor(stroke))
         canvas.setLineWidth(stroke_width)

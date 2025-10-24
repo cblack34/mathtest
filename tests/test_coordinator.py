@@ -47,7 +47,9 @@ def test_coordinator_generates_and_serializes_problems() -> None:
 
     assert len(result.problems) == 2
     assert all(problem.data["answer"] is not None for problem in result.problems)
-    assert all(entry.problem_type in {"addition", "subtraction"} for entry in result.serialized)
+    assert all(
+        entry.problem_type in {"addition", "subtraction"} for entry in result.serialized
+    )
 
     json_ready = result.json_ready()
     assert len(json_ready) == 2
