@@ -73,7 +73,7 @@ def _render_vertical_problem(top: int, bottom: int, operator: str) -> str:
     digit_span = max_operand_chars * char_width
     left_padding = margin + operator_prefix_chars * char_width
     digit_anchor_x = left_padding + digit_span
-    underline_start_x = digit_anchor_x - (len(bottom_operand) * char_width) - (operator_prefix_chars * char_width)
+    underline_start_x = left_padding
     underline_end_x = digit_anchor_x
     width = digit_anchor_x + margin
 
