@@ -16,7 +16,7 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .interface import Problem
+from .interface import MathProblemPlugin, Problem
 from .registry import PluginRegistry, PluginRegistryError
 
 
@@ -213,7 +213,7 @@ class Coordinator:
 
         problems: list[Problem] = []
         serialized: list[SerializedProblem] = []
-        plugin_instances: dict[str, Any] = {}
+        plugin_instances: dict[str, MathProblemPlugin] = {}
         generation_plan: list[str] = []
         shuffle_components: list[str] = []
         deterministic_shuffle = True
@@ -246,7 +246,7 @@ class Coordinator:
 
         if deterministic_shuffle and shuffle_components:
             shuffle_seed = self._derive_shuffle_seed(
-                shuffle_components, generation_plan
+                shuffle_components, generation_plan.copy()
             )
             random.Random(shuffle_seed).shuffle(generation_plan)
         else:
