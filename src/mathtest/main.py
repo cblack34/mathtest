@@ -6,7 +6,9 @@ import inspect
 import json
 import random
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
+
+import sys
 
 import click
 import typer
@@ -405,7 +407,24 @@ app.registered_commands.append(
 )
 
 
-def main() -> None:
+def _normalize_argv(args: Sequence[str]) -> list[str]:
+    """Ensure the CLI falls back to ``generate`` when flags are provided directly."""
+
+    normalized = list(args)
+    if not normalized:
+        return ["generate"]
+
+    first = normalized[0]
+    known_commands = {command.name for command in app.registered_commands}
+
+    if first in known_commands or not first.startswith("-"):
+        return normalized
+
+    return ["generate", *normalized]
+
+
+def main(argv: Sequence[str] | None = None) -> None:
     """Entry point used by the console script defined in ``pyproject.toml``."""
 
-    app()
+    raw_args = list(argv if argv is not None else sys.argv[1:])
+    app(args=_normalize_argv(raw_args))

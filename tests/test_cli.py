@@ -6,9 +6,16 @@ import json
 import random
 from pathlib import Path
 
+from click.testing import Result
 from typer.testing import CliRunner
 
-from mathtest.main import app
+from mathtest.main import _normalize_argv, app
+
+
+def _invoke(runner: CliRunner, args: list[str]) -> Result:
+    """Invoke the CLI replicating entry-point argument normalization."""
+
+    return runner.invoke(app, _normalize_argv(args))
 
 
 def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
@@ -18,10 +25,9 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
     pdf_path = tmp_path / "worksheet.pdf"
     json_path = tmp_path / "worksheet.json"
 
-    result = runner.invoke(
-        app,
+    result = _invoke(
+        runner,
         [
-            "generate",
             "--addition",
             "--subtraction",
             "--addition-random-seed",
@@ -51,10 +57,9 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
     assert {entry["type"] for entry in serialized} == {"addition", "subtraction"}
 
     replay_pdf = tmp_path / "replay.pdf"
-    replay_result = runner.invoke(
-        app,
+    replay_result = _invoke(
+        runner,
         [
-            "generate",
             "--json-input",
             str(json_path),
             "--output",
@@ -67,10 +72,9 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
 
     override_pdf = tmp_path / "override.pdf"
     override_json = tmp_path / "override.json"
-    override_result = runner.invoke(
-        app,
+    override_result = _invoke(
+        runner,
         [
-            "generate",
             "--addition",
             "--addition-random-seed",
             "2",
@@ -99,10 +103,9 @@ def test_cli_requires_plugin_without_json(tmp_path: Path) -> None:
     """CLI should error when neither plugin flags nor JSON input is provided."""
 
     runner = CliRunner()
-    result = runner.invoke(
-        app,
+    result = _invoke(
+        runner,
         [
-            "generate",
             "--output",
             str(tmp_path / "unused.pdf"),
         ],
@@ -119,10 +122,9 @@ def test_cli_mixed_plugins_are_interleaved(tmp_path: Path) -> None:
     random.seed(0)
 
     json_path = tmp_path / "mixed.json"
-    result = runner.invoke(
-        app,
+    result = _invoke(
+        runner,
         [
-            "generate",
             "--addition",
             "--subtraction",
             "--addition-random-seed",
@@ -142,3 +144,26 @@ def test_cli_mixed_plugins_are_interleaved(tmp_path: Path) -> None:
     assert len(types) == 10
     assert "addition" in types and "subtraction" in types
     assert any(left != right for left, right in zip(types, types[1:]))
+
+
+def test_cli_inserts_generate_prefix_for_flags(tmp_path: Path) -> None:
+    """Providing only flags should still execute the generate command."""
+
+    runner = CliRunner()
+    pdf_path = tmp_path / "implicit.pdf"
+
+    result = _invoke(
+        runner,
+        [
+            "--addition",
+            "--addition-random-seed",
+            "42",
+            "--total-problems",
+            "1",
+            "--output",
+            str(pdf_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert pdf_path.exists()
