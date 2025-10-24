@@ -43,9 +43,8 @@ class ParameterDefinition(BaseModel):
     name: str = Field(..., description="Parameter identifier such as 'max-operand'")
     default: Any = Field(..., description="Default value applied when unspecified")
     description: str = Field(..., description="Human friendly help text for the CLI")
-    value_type: Type[Any] | str | None = Field(
+    type: Type[Any] | str | None = Field(
         default=None,
-        alias="type",
         validation_alias=AliasChoices("type", "value_type"),
         description=(
             "Optional type hint used by dynamic surfaces such as the CLI to coerce "
@@ -54,10 +53,10 @@ class ParameterDefinition(BaseModel):
     )
 
     @property
-    def type(self) -> Type[Any] | str | None:
-        """Expose ``value_type`` under the historic ``type`` attribute name."""
+    def value_type(self) -> Type[Any] | str | None:
+        """Backward compatibility alias exposing ``type`` under the old name."""
 
-        return self.value_type
+        return self.type
 
 
 @runtime_checkable

@@ -43,7 +43,7 @@ def _collect_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
         plugin_cls = _REGISTRY.get_class(name)
         try:
             definitions = list(plugin_cls.get_parameters())
-        except Exception as exc:  # pragma: no cover - plugin misbehaviour
+        except Exception as exc:  # pragma: no cover - plugin misbehavior
             msg = f"Unable to load parameter definitions for '{name}'"
             raise RuntimeError(msg) from exc
         parameters[name] = definitions
