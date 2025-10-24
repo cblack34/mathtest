@@ -24,8 +24,9 @@ and subtraction problems while exporting both PDF and JSON artifacts:
 
 ```bash
 uv run mathtest generate \
-  --addition 5 \
-  --subtraction 5 \
+  --addition \
+  --subtraction \
+  --total-problems 10 \
   --output worksheets/mixed.pdf \
   --json-output worksheets/mixed.json
 ```
