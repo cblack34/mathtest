@@ -21,10 +21,6 @@ def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     normalized: dict[str, Any] = {}
     for key, value in (params or {}).items():
         normalized[key.replace("-", "_")] = value
-    if "clock_24_hour" in normalized and "clock_12_hour" not in normalized:
-        # Activating 24-hour mode should implicitly disable the 12-hour toggle
-        # so callers do not have to pass both flags.
-        normalized["clock_12_hour"] = False
     return normalized
 
 
@@ -77,13 +73,9 @@ class _ClockParams(BaseModel):
         default=None,
         description="Optional seed applied to the plugin RNG for deterministic tests.",
     )
-    clock_12_hour: bool = Field(
-        default=True,
-        description="Render the clock using a 12-hour dial (default).",
-    )
     clock_24_hour: bool = Field(
         default=False,
-        description="Render the clock using a 24-hour dial with hours 0–23.",
+        description="Render the clock using a 24-hour dial with hours 0–23. When false, uses 12-hour dial.",
     )
 
     @model_validator(mode="after")
@@ -91,16 +83,13 @@ class _ClockParams(BaseModel):
         if self.minute_interval not in _ALLOWED_MINUTE_INTERVALS:
             msg = "minute_interval must be one of {5, 15, 30, 60}"
             raise ValueError(msg)
-        if self.clock_12_hour and self.clock_24_hour:
-            msg = "clock_12_hour and clock_24_hour cannot both be true"
-            raise ValueError(msg)
         return self
 
     @property
     def is_24_hour(self) -> bool:
         """Return ``True`` when the clock should display a 24-hour dial."""
 
-        return self.clock_24_hour or not self.clock_12_hour
+        return self.clock_24_hour
 
 
 class _ClockData(BaseModel):
@@ -194,9 +183,9 @@ def _render_clock_face(data: _ClockData) -> str:
     center_y = 160.0
     outer_radius = 110.0
     bezel_radius = outer_radius + 10.0
-    number_radius = outer_radius - 10.0
-    tick_outer_radius = number_radius - 18.0
-    tick_inner_radius = tick_outer_radius - 14.0
+    number_radius = outer_radius - 16.0
+    tick_outer_radius = number_radius - 20.0
+    tick_inner_radius = tick_outer_radius - 12.0
     hour_hand_length = 72.0
     minute_hand_length = 104.0
 
@@ -224,7 +213,7 @@ def _render_clock_face(data: _ClockData) -> str:
 
     labels = list(_clock_labels(data.is_24_hour))
     step = 360.0 / len(labels)
-    number_font_size = 14 if data.is_24_hour else 20
+    number_font_size = 24 if data.is_24_hour else 32
 
     for index, label in enumerate(labels):
         angle = index * step
@@ -290,7 +279,7 @@ def _render_clock_face(data: _ClockData) -> str:
         drawing.text(
             "Answer:",
             insert=(answer_label_x, answer_line_y - 14),
-            font_size="18px",
+            font_size="24px",
             font_family="FiraSans, sans-serif",
         )
     )
@@ -340,12 +329,6 @@ class ClockPlugin:
                 name="accurate-hour",
                 default=False,
                 description="Move the hour hand toward the next hour based on the minutes.",
-                type=bool,
-            ),
-            ParameterDefinition(
-                name="clock-12-hour",
-                default=True,
-                description="Render a 12-hour dial (1–12).",
                 type=bool,
             ),
             ParameterDefinition(
@@ -413,4 +396,3 @@ class ClockPlugin:
 
         svg = _render_clock_face(payload)
         return Problem(svg=svg, data=payload.model_dump())
-
