@@ -207,6 +207,13 @@ class _DivisionData(BaseModel):
         default=None,
         description="The remainder of the division (if any).",
     )
+    # The main app expects an 'answer' key for the answer key in the PDF.
+    # For division, we express this as either just the quotient (no remainder)
+    # or "<quotient> r <remainder>" when a remainder exists.
+    answer: str | None = Field(
+        default=None,
+        description="Display answer used by the worksheet answer key.",
+    )
     min_digit_chars: int | None = Field(
         default=None,
         ge=1,
@@ -238,6 +245,17 @@ class _DivisionData(BaseModel):
             self.remainder = computed_remainder
         elif self.remainder != computed_remainder:
             msg = "remainder does not match the result of dividend % divisor"
+            raise ValueError(msg)
+
+        expected_answer = (
+            str(computed_quotient)
+            if computed_remainder == 0
+            else f"{computed_quotient} r {computed_remainder}"
+        )
+        if self.answer is None:
+            self.answer = expected_answer
+        elif self.answer != expected_answer:
+            msg = "answer does not match quotient/remainder values"
             raise ValueError(msg)
 
         return self
@@ -294,13 +312,13 @@ class DivisionPlugin:
         return [
             ParameterDefinition(
                 name="min-dividend",
-                default=1,
+                default=0,
                 description="Minimum dividend value (inclusive) for random division problems.",
                 type=int,
             ),
             ParameterDefinition(
                 name="max-dividend",
-                default=100,
+                default=10,
                 description="Maximum dividend value (inclusive) for random division problems.",
                 type=int,
             ),
@@ -338,20 +356,21 @@ class DivisionPlugin:
             payload required for deterministic regeneration.
         """
 
-        while True:
-            dividend = self._random.randint(
-                self._config.min_dividend, self._config.max_dividend
-            )
-            divisor = self._random.randint(
-                self._config.min_divisor, self._config.max_divisor
-            )
+        def _sample_valid_division() -> tuple[int, int, int, int]:
+            while True:
+                dv = self._random.randint(
+                    self._config.min_dividend, self._config.max_dividend
+                )
+                dr = self._random.randint(
+                    self._config.min_divisor, self._config.max_divisor
+                )
+                rem = dv % dr
+                if not self._config.allow_remainders and rem != 0:
+                    continue
+                quo = dv // dr
+                return dv, dr, quo, rem
 
-            remainder = dividend % divisor
-            if not self._config.allow_remainders and remainder != 0:
-                continue  # Try again if remainders not allowed
-
-            quotient = dividend // divisor
-            break
+        dividend, divisor, quotient, remainder = _sample_valid_division()
 
         svg = _render_vertical_problem(
             dividend,
@@ -359,12 +378,14 @@ class DivisionPlugin:
             "÷",
             minimum_digit_chars=self._min_digit_chars,
         )
+        answer_str = str(quotient) if remainder == 0 else f"{quotient} r {remainder}"
         data = {
             "dividend": dividend,
             "divisor": divisor,
             "operator": "÷",
             "quotient": quotient,
             "remainder": remainder,
+            "answer": answer_str,
             "min_digit_chars": self._min_digit_chars,
         }
         return Problem(svg=svg, data=data)
