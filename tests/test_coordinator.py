@@ -10,6 +10,7 @@ from mathtest.coordinator import (
 )
 from mathtest.plugins.addition import AdditionPlugin
 from mathtest.plugins.subtraction import SubtractionPlugin
+from mathtest.plugins.multiplication import MultiplicationPlugin
 from mathtest.registry import PluginRegistry
 
 
@@ -20,6 +21,7 @@ def _registry_with_core_plugins() -> PluginRegistry:
         plugins={
             "addition": AdditionPlugin,
             "subtraction": SubtractionPlugin,
+            "multiplication": MultiplicationPlugin,
         }
     )
 
