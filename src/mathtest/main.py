@@ -282,32 +282,39 @@ def _static_generate_options() -> list[click.Option]:
     ]
 
 
+_PLUGIN_OPTION_ATTR = "_mathtest_plugin_name"
+_PLUGIN_OPTION_KIND_ATTR = "_mathtest_plugin_option_kind"
+
+
 def _plugin_generate_options() -> list[click.Option]:
     """Return plugin-derived Click options for the generate command."""
 
     options: list[click.Option] = []
     for plugin_name, definitions in _PLUGIN_PARAMETERS.items():
-        options.append(
-            click.Option(
-                [f"--{plugin_name}"],
-                is_flag=True,
-                default=False,
-                help=f"Include {plugin_name} problems in the worksheet.",
-            )
+        plugin_flag = click.Option(
+            [f"--{plugin_name}"],
+            is_flag=True,
+            default=False,
+            help=f"Include {plugin_name} problems in the worksheet.",
         )
+        setattr(plugin_flag, _PLUGIN_OPTION_ATTR, plugin_name)
+        setattr(plugin_flag, _PLUGIN_OPTION_KIND_ATTR, "flag")
+        options.append(plugin_flag)
+
         for definition in definitions:
-            options.append(
-                click.Option(
-                    [f"--{plugin_name}-{definition.name}"],
-                    type=_click_type_for(definition),
-                    default=None,
-                    metavar="VALUE",
-                    help=(
-                        f"Override for {plugin_name} parameter '{definition.name}': "
-                        f"{definition.description}"
-                    ),
-                )
+            override_option = click.Option(
+                [f"--{plugin_name}-{definition.name}"],
+                type=_click_type_for(definition),
+                default=None,
+                metavar="VALUE",
+                help=(
+                    f"Override for {plugin_name} parameter '{definition.name}': "
+                    f"{definition.description}"
+                ),
             )
+            setattr(override_option, _PLUGIN_OPTION_ATTR, plugin_name)
+            setattr(override_option, _PLUGIN_OPTION_KIND_ATTR, "override")
+            options.append(override_option)
     return options
 
 
@@ -330,7 +337,97 @@ class _GenerateCommand(TyperCommand):
         params = list(kwargs.pop("params", []))
         params.extend(_static_generate_options())
         params.extend(_plugin_generate_options())
+        kwargs.setdefault("rich_markup_mode", None)
         super().__init__(*args, params=params, **kwargs)
+
+    def collect_usage_pieces(self, ctx: click.Context) -> list[str]:
+        pieces = super().collect_usage_pieces(ctx)
+        return [piece for piece in pieces if "KWARGS" not in piece]
+
+    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        plugin_records = self._plugin_help_sections(ctx)
+
+        if plugin_records:
+            self._write_plugin_summary(formatter, plugin_records)
+            self._write_plugin_option_sections(formatter, plugin_records)
+            formatter.write("\n")
+
+        captured = click.HelpFormatter(width=formatter.width)
+        original_params = list(self.params)
+        try:
+            self.params = [
+                param
+                for param in original_params
+                if not self._is_plugin_option(param)
+            ]
+            super().format_help(ctx, captured)
+        finally:
+            self.params = original_params
+
+        formatter.write(captured.getvalue())
+
+    @staticmethod
+    def _is_plugin_option(param: click.Parameter) -> bool:
+        return getattr(param, _PLUGIN_OPTION_ATTR, None) is not None
+
+    def _plugin_help_sections(
+        self, ctx: click.Context
+    ) -> dict[str, dict[str, list[tuple[str, str]]]]:
+        flag_key = "flag"
+        override_key = "override"
+        sections: dict[str, dict[str, list[tuple[str, str]]]] = {}
+        for plugin_name in _PLUGIN_PARAMETERS:
+            sections[plugin_name] = {flag_key: [], override_key: []}
+
+        for param in self.params:
+            plugin_name = getattr(param, _PLUGIN_OPTION_ATTR, None)
+            if plugin_name is None:
+                continue
+
+            record = param.get_help_record(ctx)
+            if not record:
+                continue
+
+            option_kind = getattr(param, _PLUGIN_OPTION_KIND_ATTR, override_key)
+            sections[plugin_name][option_kind].append(record)
+
+        return sections
+
+    def _write_plugin_summary(
+        self,
+        formatter: click.HelpFormatter,
+        sections: dict[str, dict[str, list[tuple[str, str]]]],
+    ) -> None:
+        with formatter.section("Plugins"):
+            rows: list[tuple[str, str]] = []
+            for plugin_name in _PLUGIN_PARAMETERS:
+                description = _plugin_description(plugin_name)
+                flag_records = sections.get(plugin_name, {}).get("flag", [])
+                label = flag_records[0][0] if flag_records else f"--{plugin_name}"
+                rows.append((label, description))
+            formatter.write_dl(rows)
+
+    def _write_plugin_option_sections(
+        self,
+        formatter: click.HelpFormatter,
+        sections: dict[str, dict[str, list[tuple[str, str]]]],
+    ) -> None:
+        for plugin_name in _PLUGIN_PARAMETERS:
+            override_records = sections.get(plugin_name, {}).get("override", [])
+            if not override_records:
+                continue
+
+            heading = f"{plugin_name.title()} Options"
+            with formatter.section(heading):
+                formatter.write_dl(override_records)
+
+
+def _plugin_description(plugin_name: str) -> str:
+    plugin_cls = _REGISTRY.get_class(plugin_name)
+    doc = inspect.cleandoc(plugin_cls.__doc__ or "")
+    if not doc:
+        return f"{plugin_name.title()} plugin"
+    return doc.splitlines()[0]
 
 
 def generate(
