@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.11.0",
     "pyyaml>=6.0.3",
     "reportlab>=4.4.4",
+    "svglib>=1.6.0",
     "svgwrite>=1.4.3",
     "typer>=0.20.0",
 ]

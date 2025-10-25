@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
-from typing import Any
 
 
 def _build_text_svg(
@@ -31,6 +31,7 @@ from reportlab.lib.pagesizes import letter
 
 from mathtest.interface import Problem
 from mathtest.output import PdfOutputGenerator
+from mathtest.output.pdf import PdfOutputParams
 from mathtest.plugins.addition import AdditionPlugin
 
 
@@ -105,6 +106,64 @@ def test_pdf_output_requires_path(sample_problems: list) -> None:
         generator.generate(sample_problems, {})
 
 
+def test_pdf_output_uses_svg2rlg_drawings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The generator should convert SVG markup to ReportLab drawings."""
+
+    output_path = tmp_path / "worksheet.pdf"
+    problem = Problem(svg=_build_text_svg(80, 40, "1 + 1"), data={"answer": 2})
+    generator = PdfOutputGenerator()
+
+    class MockDrawing:
+        def __init__(self) -> None:
+            self.width = 80.0
+            self.height = 40.0
+
+    mock_drawing = MockDrawing()
+    svg_inputs: list[str] = []
+    matrices: list[tuple[float, float, float, float, float, float]] = []
+
+    def fake_svg2rlg(stream: io.StringIO) -> MockDrawing:
+        assert isinstance(stream, io.StringIO)
+        svg_inputs.append(stream.getvalue())
+        return mock_drawing
+
+    def fake_render(drawing: MockDrawing, canvas, x: float, y: float) -> None:
+        assert drawing is mock_drawing
+        assert x == 0 and y == 0
+        matrices.append(canvas._currentMatrix)
+
+    monkeypatch.setattr("mathtest.output.pdf.svg2rlg", fake_svg2rlg)
+    monkeypatch.setattr("mathtest.output.pdf.renderPDF.draw", fake_render)
+
+    generator.generate([problem], {"path": output_path})
+
+    assert output_path.exists()
+    assert svg_inputs == [problem.svg]
+    assert matrices
+
+    matrix = matrices[0]
+    scale = matrix[0]
+    x_offset = matrix[4]
+    y_offset = matrix[5]
+
+    config = PdfOutputParams(path=output_path)
+    page_width, page_height = letter
+    total_spacing = config.column_spacing * (config.columns - 1)
+    content_width = page_width - (2 * config.margin)
+    column_width = (content_width - total_spacing) / config.columns
+    expected_scale = column_width / mock_drawing.width
+    assert scale == pytest.approx(expected_scale, rel=1e-6)
+    assert x_offset == pytest.approx(config.margin, rel=1e-6)
+
+    expected_bottom = config.margin
+    assert y_offset == pytest.approx(expected_bottom, rel=1e-6)
+
+    top_position = y_offset + (mock_drawing.height * expected_scale)
+    assert top_position > expected_bottom
+
+
 def test_pdf_output_columns_layout(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -121,45 +180,35 @@ def test_pdf_output_columns_layout(
     generator = PdfOutputGenerator()
     output_path = tmp_path / "columns.pdf"
 
-    placements: list[dict[str, float]] = []
-    observed_config: list[Any] = []
-    original_draw_problem = PdfOutputGenerator._draw_problem
+    class MockDrawing:
+        def __init__(self, width: float, height: float) -> None:
+            self.width = float(width)
+            self.height = float(height)
 
-    def capture_draw(
-        self: PdfOutputGenerator,
-        canvas: Any,
-        svg_root: Any,
-        geometry: Any,
-        config: Any,
-        current_y: float,
-        scale: float,
-        x_offset: float,
-    ) -> None:
-        if not observed_config:
-            observed_config.append(config)
-        scaled_height = geometry.height * scale
-        placements.append(
-            {
-                "x": x_offset,
-                "top": current_y,
-                "bottom": current_y - scaled_height,
-                "width": geometry.width * scale,
-                "height": scaled_height,
-                "original_width": geometry.width,
-                "problem_index": len(placements),
-            }
-        )
-        original_draw_problem(
-            self, canvas, svg_root, geometry, config, current_y, scale, x_offset
-        )
+    draw_specs = [(120.0, 48.0) for _ in range(len(problems) - 1)] + [(40.0, 24.0)]
+    drawings: list[MockDrawing] = []
+    matrices: list[tuple[float, float, float, float, float, float]] = []
 
-    monkeypatch.setattr(PdfOutputGenerator, "_draw_problem", capture_draw)
+    def fake_svg2rlg(stream: io.StringIO) -> MockDrawing:
+        assert isinstance(stream, io.StringIO)
+        width, height = draw_specs[len(drawings)]
+        drawing = MockDrawing(width, height)
+        drawings.append(drawing)
+        return drawing
+
+    def fake_render(drawing: MockDrawing, canvas, x: float, y: float) -> None:
+        assert x == 0 and y == 0
+        matrices.append(canvas._currentMatrix)
+
+    monkeypatch.setattr("mathtest.output.pdf.svg2rlg", fake_svg2rlg)
+    monkeypatch.setattr("mathtest.output.pdf.renderPDF.draw", fake_render)
 
     generator.generate(problems, {"path": output_path})
 
     assert output_path.exists()
-    assert placements
-    config = observed_config[0]
+    assert matrices
+    assert len(drawings) == len(problems)
+    config = PdfOutputParams(path=output_path)
 
     page_width, _ = letter
     column_spacing = config.column_spacing
@@ -179,6 +228,23 @@ def test_pdf_output_columns_layout(
     column_groups: dict[int, list[dict[str, float]]] = {
         index: [] for index in range(config.columns)
     }
+
+    placements: list[dict[str, float]] = []
+    for index, (matrix, drawing) in enumerate(zip(matrices, drawings)):
+        scale_x, _, _, scale_y, tx, ty = matrix
+        width = drawing.width * scale_x
+        height = drawing.height * scale_y
+        placements.append(
+            {
+                "x": tx,
+                "top": ty + height,
+                "bottom": ty,
+                "width": width,
+                "height": height,
+                "original_width": drawing.width,
+                "problem_index": index,
+            }
+        )
 
     def assign_row(top: float) -> int:
         for idx, existing in enumerate(row_tops):
