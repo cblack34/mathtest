@@ -262,7 +262,7 @@ def _static_generate_options() -> list[click.Option]:
         click.Option(
             ["--title"],
             type=str,
-            default="Math Test",
+            default="Test",
             show_default=True,
             help="Title displayed at the top of the worksheet.",
         ),

@@ -86,7 +86,7 @@ class PdfOutputParams(BaseModel):
 
     path: Path = Field(..., description="Destination PDF file path.")
     title: str = Field(
-        default="Math Test",
+        default="Test",
         description="Optional document title rendered on the first page.",
     )
     margin_inches: float = Field(
