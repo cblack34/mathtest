@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -13,8 +14,8 @@ import click
 import typer
 import yaml
 from pydantic import ValidationError
+from typer.core import TyperOption
 from typer.main import TyperCommand
-from typer.models import CommandInfo
 
 from .coordinator import (
     Coordinator,
@@ -283,7 +284,6 @@ def _static_generate_options() -> list[click.Option]:
 
 
 _PLUGIN_OPTION_ATTR = "_mathtest_plugin_name"
-_PLUGIN_OPTION_KIND_ATTR = "_mathtest_plugin_option_kind"
 
 
 def _plugin_generate_options() -> list[click.Option]:
@@ -291,19 +291,19 @@ def _plugin_generate_options() -> list[click.Option]:
 
     options: list[click.Option] = []
     for plugin_name, definitions in _PLUGIN_PARAMETERS.items():
-        plugin_flag = click.Option(
-            [f"--{plugin_name}"],
+        plugin_flag = TyperOption(
+            param_decls=[f"--{plugin_name}"],
             is_flag=True,
             default=False,
-            help=f"Include {plugin_name} problems in the worksheet.",
+            help=_plugin_description(plugin_name),
+            rich_help_panel="Plugins",
         )
         setattr(plugin_flag, _PLUGIN_OPTION_ATTR, plugin_name)
-        setattr(plugin_flag, _PLUGIN_OPTION_KIND_ATTR, "flag")
         options.append(plugin_flag)
 
         for definition in definitions:
-            override_option = click.Option(
-                [f"--{plugin_name}-{definition.name}"],
+            override_option = TyperOption(
+                param_decls=[f"--{plugin_name}-{definition.name}"],
                 type=_click_type_for(definition),
                 default=None,
                 metavar="VALUE",
@@ -311,9 +311,9 @@ def _plugin_generate_options() -> list[click.Option]:
                     f"Override for {plugin_name} parameter '{definition.name}': "
                     f"{definition.description}"
                 ),
+                rich_help_panel=f"{plugin_name.title()} Options",
             )
             setattr(override_option, _PLUGIN_OPTION_ATTR, plugin_name)
-            setattr(override_option, _PLUGIN_OPTION_KIND_ATTR, "override")
             options.append(override_option)
     return options
 
@@ -334,7 +334,11 @@ class _GenerateCommand(TyperCommand):
     """Custom Click command that injects dynamic plugin options."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        params = list(kwargs.pop("params", []))
+        params = [
+            param
+            for param in kwargs.pop("params", [])
+            if getattr(param, "param_type_name", None) != "argument"
+        ]
         params.extend(_static_generate_options())
         params.extend(_plugin_generate_options())
         kwargs.setdefault("rich_markup_mode", None)
@@ -345,82 +349,40 @@ class _GenerateCommand(TyperCommand):
         return [piece for piece in pieces if "KWARGS" not in piece]
 
     def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
-        plugin_records = self._plugin_help_sections(ctx)
-
-        if plugin_records:
-            self._write_plugin_summary(formatter, plugin_records)
-            self._write_plugin_option_sections(formatter, plugin_records)
-            formatter.write("\n")
-
         captured = click.HelpFormatter(width=formatter.width)
-        original_params = list(self.params)
-        try:
-            self.params = [
-                param
-                for param in original_params
-                if not self._is_plugin_option(param)
-            ]
-            super().format_help(ctx, captured)
-        finally:
-            self.params = original_params
+        super().format_help(ctx, captured)
+        formatter.write(self._strip_kwargs_arguments(captured.getvalue()))
 
-        formatter.write(captured.getvalue())
+    def get_help(self, ctx: click.Context) -> str:  # pragma: no cover - exercised via CLI tests
+        return self._strip_kwargs_arguments(super().get_help(ctx))
 
     @staticmethod
-    def _is_plugin_option(param: click.Parameter) -> bool:
-        return getattr(param, _PLUGIN_OPTION_ATTR, None) is not None
+    def _strip_kwargs_arguments(raw_help: str) -> str:
+        if "kwargs" not in raw_help.lower():
+            return raw_help
 
-    def _plugin_help_sections(
-        self, ctx: click.Context
-    ) -> dict[str, dict[str, list[tuple[str, str]]]]:
-        flag_key = "flag"
-        override_key = "override"
-        sections: dict[str, dict[str, list[tuple[str, str]]]] = {}
-        for plugin_name in _PLUGIN_PARAMETERS:
-            sections[plugin_name] = {flag_key: [], override_key: []}
-
-        for param in self.params:
-            plugin_name = getattr(param, _PLUGIN_OPTION_ATTR, None)
-            if plugin_name is None:
+        lines = raw_help.splitlines()
+        cleaned_lines: list[str] = []
+        skipping_rich = False
+        for line in lines:
+            stripped = line.strip()
+            if not skipping_rich and "Arguments" in stripped and stripped.startswith("╭"):
+                skipping_rich = True
                 continue
-
-            record = param.get_help_record(ctx)
-            if not record:
+            if skipping_rich:
+                if stripped.startswith("╰"):
+                    skipping_rich = False
                 continue
+            cleaned_lines.append(line)
 
-            option_kind = getattr(param, _PLUGIN_OPTION_KIND_ATTR, override_key)
-            sections[plugin_name][option_kind].append(record)
+        cleaned_text = "\n".join(cleaned_lines)
 
-        return sections
+        plain_pattern = re.compile(
+            r"\nArguments:\n(?:[^\n]*\n)*?(?=\n\S|\Z)", re.IGNORECASE
+        )
+        cleaned_text = plain_pattern.sub("\n", cleaned_text)
 
-    def _write_plugin_summary(
-        self,
-        formatter: click.HelpFormatter,
-        sections: dict[str, dict[str, list[tuple[str, str]]]],
-    ) -> None:
-        with formatter.section("Plugins"):
-            rows: list[tuple[str, str]] = []
-            for plugin_name in _PLUGIN_PARAMETERS:
-                description = _plugin_description(plugin_name)
-                flag_records = sections.get(plugin_name, {}).get("flag", [])
-                label = flag_records[0][0] if flag_records else f"--{plugin_name}"
-                rows.append((label, description))
-            formatter.write_dl(rows)
-
-    def _write_plugin_option_sections(
-        self,
-        formatter: click.HelpFormatter,
-        sections: dict[str, dict[str, list[tuple[str, str]]]],
-    ) -> None:
-        for plugin_name in _PLUGIN_PARAMETERS:
-            override_records = sections.get(plugin_name, {}).get("override", [])
-            if not override_records:
-                continue
-
-            heading = f"{plugin_name.title()} Options"
-            with formatter.section(heading):
-                formatter.write_dl(override_records)
-
+        return cleaned_text
 
 def _plugin_description(plugin_name: str) -> str:
     plugin_cls = _REGISTRY.get_class(plugin_name)
@@ -506,29 +468,23 @@ def _generate_entrypoint(**kwargs) -> None:
 _GENERATE_HELP = (
     inspect.cleandoc(generate.__doc__ or "").splitlines()[0] if generate.__doc__ else ""
 )
-app.registered_commands.append(
-    CommandInfo(
-        name="generate",
-        cls=_GenerateCommand,
-        callback=_generate_entrypoint,
-        help=_GENERATE_HELP,
-    ),
-)
+
+
+@app.command(name="generate", cls=_GenerateCommand, help=_GENERATE_HELP)
+def _generate_command(**kwargs) -> None:
+    _generate_entrypoint(**kwargs)
 
 
 def _normalize_argv(args: Sequence[str]) -> list[str]:
     """Ensure the CLI falls back to ``generate`` when flags are provided directly."""
 
     if not args:
-        return ["generate"]
+        return []
 
-    first = args[0]
-    known_commands = {command.name for command in app.registered_commands}
+    if args and args[0] == "generate":
+        return list(args[1:])
 
-    if first in known_commands or not first.startswith("-"):
-        return list(args)
-
-    return ["generate", *args]
+    return list(args)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
