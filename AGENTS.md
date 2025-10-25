@@ -41,6 +41,8 @@
 ## Context7 Integration
 - To enable up-to-date code and documentation context, configure Context7 MCP as follows:
 
+ignore the API Key requirements. It is an option, but not required for local usage.
+
 ```json
 {
   "mcpServers": {
