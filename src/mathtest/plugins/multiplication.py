@@ -289,12 +289,12 @@ class MultiplicationPlugin:
         svg = _render_vertical_problem(
             multiplicand,
             multiplier,
-            "X",
+            "x",  # Render lowercase 'x' in the SVG
             minimum_digit_chars=self._min_digit_chars,
         )
         data = {
             "operands": [multiplicand, multiplier],
-            "operator": "X",
+            "operator": "x",
             "answer": answer,
             "min_digit_chars": self._min_digit_chars,
         }
@@ -331,7 +331,7 @@ class MultiplicationPlugin:
         svg = _render_vertical_problem(
             top,
             bottom,
-            "X",
+            "x",  # Render lowercase 'x' in the SVG
             minimum_digit_chars=min_digit_chars,
         )
         payload = validated.model_dump()
