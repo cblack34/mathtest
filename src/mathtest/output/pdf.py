@@ -230,7 +230,7 @@ class PdfOutputGenerator(OutputGenerator):
                     drawing=drawing,
                     scale=scale,
                     scaled_height=scaled_height,
-                    scaled_width=float(drawing.width) * scale,
+                    scaled_width=drawing.width * scale,
                 )
             )
 
