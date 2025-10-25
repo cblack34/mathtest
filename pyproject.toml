@@ -23,6 +23,7 @@ mathtest = "mathtest:main"
 [project.entry-points."mathtest.plugins"]
 addition = "mathtest.plugins.addition:AdditionPlugin"
 subtraction = "mathtest.plugins.subtraction:SubtractionPlugin"
+multiplication = "mathtest.plugins.multiplication:MultiplicationPlugin"
 clock = "mathtest.plugins.clock:ClockPlugin"
 
 [build-system]
