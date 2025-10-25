@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Protocol, Sequence, Type, runtime_checkable
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
 
 
 class Problem(BaseModel):
@@ -29,6 +29,19 @@ class Problem(BaseModel):
             "Structured data required to recreate the problem, including the answer"
         ),
     )
+
+    @model_validator(mode="after")
+    def _ensure_required_fields(self) -> "Problem":
+        """Validate presence of fields used by the main app.
+
+        Currently the PDF output generator relies on an ``answer`` value to
+        build the answer key, so every problem's data must include it.
+        """
+
+        if "answer" not in self.data or self.data["answer"] is None:
+            msg = "Problem data must include an 'answer' field for the answer key"
+            raise ValueError(msg)
+        return self
 
 
 class ParameterDefinition(BaseModel):
