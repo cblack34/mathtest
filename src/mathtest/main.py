@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import json
 import random
+import re
 import sys
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -13,8 +14,8 @@ import click
 import typer
 import yaml
 from pydantic import ValidationError
+from typer.core import TyperOption
 from typer.main import TyperCommand
-from typer.models import CommandInfo
 
 from .coordinator import (
     Coordinator,
@@ -282,32 +283,38 @@ def _static_generate_options() -> list[click.Option]:
     ]
 
 
+_PLUGIN_OPTION_ATTR = "_mathtest_plugin_name"
+
+
 def _plugin_generate_options() -> list[click.Option]:
     """Return plugin-derived Click options for the generate command."""
 
     options: list[click.Option] = []
     for plugin_name, definitions in _PLUGIN_PARAMETERS.items():
-        options.append(
-            click.Option(
-                [f"--{plugin_name}"],
-                is_flag=True,
-                default=False,
-                help=f"Include {plugin_name} problems in the worksheet.",
-            )
+        plugin_flag = TyperOption(
+            param_decls=[f"--{plugin_name}"],
+            is_flag=True,
+            default=False,
+            help=_plugin_description(plugin_name),
+            rich_help_panel="Plugins",
         )
+        setattr(plugin_flag, _PLUGIN_OPTION_ATTR, plugin_name)
+        options.append(plugin_flag)
+
         for definition in definitions:
-            options.append(
-                click.Option(
-                    [f"--{plugin_name}-{definition.name}"],
-                    type=_click_type_for(definition),
-                    default=None,
-                    metavar="VALUE",
-                    help=(
-                        f"Override for {plugin_name} parameter '{definition.name}': "
-                        f"{definition.description}"
-                    ),
-                )
+            override_option = TyperOption(
+                param_decls=[f"--{plugin_name}-{definition.name}"],
+                type=_click_type_for(definition),
+                default=None,
+                metavar="VALUE",
+                help=(
+                    f"Override for {plugin_name} parameter '{definition.name}': "
+                    f"{definition.description}"
+                ),
+                rich_help_panel=f"{plugin_name.title()} Options",
             )
+            setattr(override_option, _PLUGIN_OPTION_ATTR, plugin_name)
+            options.append(override_option)
     return options
 
 
@@ -327,10 +334,62 @@ class _GenerateCommand(TyperCommand):
     """Custom Click command that injects dynamic plugin options."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        params = list(kwargs.pop("params", []))
+        params = [
+            param
+            for param in kwargs.pop("params", [])
+            if getattr(param, "param_type_name", None) != "argument"
+        ]
         params.extend(_static_generate_options())
         params.extend(_plugin_generate_options())
+        kwargs.setdefault("rich_markup_mode", None)
         super().__init__(*args, params=params, **kwargs)
+
+    def collect_usage_pieces(self, ctx: click.Context) -> list[str]:
+        pieces = super().collect_usage_pieces(ctx)
+        return [piece for piece in pieces if "KWARGS" not in piece]
+
+    def format_help(self, ctx: click.Context, formatter: click.HelpFormatter) -> None:
+        captured = click.HelpFormatter(width=formatter.width)
+        super().format_help(ctx, captured)
+        formatter.write(self._strip_kwargs_arguments(captured.getvalue()))
+
+    def get_help(self, ctx: click.Context) -> str:  # pragma: no cover - exercised via CLI tests
+        return self._strip_kwargs_arguments(super().get_help(ctx))
+
+    @staticmethod
+    def _strip_kwargs_arguments(raw_help: str) -> str:
+        if "kwargs" not in raw_help.lower():
+            return raw_help
+
+        lines = raw_help.splitlines()
+        cleaned_lines: list[str] = []
+        skipping_rich = False
+        for line in lines:
+            stripped = line.strip()
+            if not skipping_rich and "Arguments" in stripped and stripped.startswith("╭"):
+                skipping_rich = True
+                continue
+            if skipping_rich:
+                if stripped.startswith("╰"):
+                    skipping_rich = False
+                continue
+            cleaned_lines.append(line)
+
+        cleaned_text = "\n".join(cleaned_lines)
+
+        plain_pattern = re.compile(
+            r"\nArguments:\n(?:[^\n]*\n)*?(?=\n\S|\Z)", re.IGNORECASE
+        )
+        cleaned_text = plain_pattern.sub("\n", cleaned_text)
+
+        return cleaned_text
+
+def _plugin_description(plugin_name: str) -> str:
+    plugin_cls = _REGISTRY.get_class(plugin_name)
+    doc = inspect.cleandoc(plugin_cls.__doc__ or "")
+    if not doc:
+        return f"{plugin_name.title()} plugin"
+    return doc.splitlines()[0]
 
 
 def generate(
@@ -409,29 +468,23 @@ def _generate_entrypoint(**kwargs) -> None:
 _GENERATE_HELP = (
     inspect.cleandoc(generate.__doc__ or "").splitlines()[0] if generate.__doc__ else ""
 )
-app.registered_commands.append(
-    CommandInfo(
-        name="generate",
-        cls=_GenerateCommand,
-        callback=_generate_entrypoint,
-        help=_GENERATE_HELP,
-    ),
-)
+
+
+@app.command(name="generate", cls=_GenerateCommand, help=_GENERATE_HELP)
+def _generate_command(**kwargs) -> None:
+    _generate_entrypoint(**kwargs)
 
 
 def _normalize_argv(args: Sequence[str]) -> list[str]:
     """Ensure the CLI falls back to ``generate`` when flags are provided directly."""
 
     if not args:
-        return ["generate"]
+        return []
 
-    first = args[0]
-    known_commands = {command.name for command in app.registered_commands}
+    if args and args[0] == "generate":
+        return list(args[1:])
 
-    if first in known_commands or not first.startswith("-"):
-        return list(args)
-
-    return ["generate", *args]
+    return list(args)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
