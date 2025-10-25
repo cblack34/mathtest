@@ -194,9 +194,9 @@ def _render_clock_face(data: _ClockData) -> str:
     center_y = 160.0
     outer_radius = 110.0
     bezel_radius = outer_radius + 10.0
-    number_radius = outer_radius - 10.0
-    tick_outer_radius = number_radius - 18.0
-    tick_inner_radius = tick_outer_radius - 14.0
+    number_radius = outer_radius - 16.0
+    tick_outer_radius = number_radius - 14.0
+    tick_inner_radius = tick_outer_radius - 12.0
     hour_hand_length = 72.0
     minute_hand_length = 104.0
 
@@ -224,7 +224,7 @@ def _render_clock_face(data: _ClockData) -> str:
 
     labels = list(_clock_labels(data.is_24_hour))
     step = 360.0 / len(labels)
-    number_font_size = 14 if data.is_24_hour else 20
+    number_font_size = 18 if data.is_24_hour else 24
 
     for index, label in enumerate(labels):
         angle = index * step
