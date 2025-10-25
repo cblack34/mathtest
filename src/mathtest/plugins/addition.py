@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from ..interface import ParameterDefinition, Problem
 
 
+_VERTICAL_FONT_SIZE = 34
+_VERTICAL_HEIGHT_MULTIPLIERS = [0.4, 1.0, 1.25, 0.35, 1.125]
+
+
 def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
     """Map external configuration keys to Pydantic field names.
 
@@ -66,16 +70,15 @@ def _render_vertical_problem(
         consistent.
     """
 
-    font_size = 34
-    char_width = font_size * 0.6
-    margin = font_size * 0.45
-    top_padding = font_size * 0.4
-    baseline_gap = font_size * 1.25
-    underline_offset = font_size * 0.35
+    char_width = _VERTICAL_FONT_SIZE * 0.6
+    margin = _VERTICAL_FONT_SIZE * 0.45
+    top_padding = _VERTICAL_FONT_SIZE * 0.4
+    baseline_gap = _VERTICAL_FONT_SIZE * 1.25
+    underline_offset = _VERTICAL_FONT_SIZE * 0.35
     # Provide extra writing room beneath the underline for student answers.
-    bottom_padding = font_size * 1.125
+    bottom_padding = _VERTICAL_FONT_SIZE * 1.125
 
-    top_y = top_padding + font_size
+    top_y = top_padding + _VERTICAL_FONT_SIZE
     bottom_y = top_y + baseline_gap
     line_y = bottom_y + underline_offset
     height = line_y + bottom_padding
@@ -104,7 +107,7 @@ def _render_vertical_problem(
     drawing.viewbox(0, 0, _round(width), _round(height))
 
     text_style = {
-        "font_size": f"{font_size}px",
+        "font_size": f"{_VERTICAL_FONT_SIZE}px",
         "font_family": "FiraMono, monospace",
         "text_anchor": "end",
     }

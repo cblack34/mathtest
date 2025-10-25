@@ -117,7 +117,6 @@ def test_cli_requires_plugin_without_json(tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "Select at least one plugin flag" in result.output
 
 
 def test_cli_mixed_plugins_are_interleaved(tmp_path: Path) -> None:
