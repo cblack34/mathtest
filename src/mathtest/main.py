@@ -59,31 +59,28 @@ _PLUGIN_PARAMETERS = _collect_plugin_parameters()
 def _collect_global_parameter_defaults() -> dict[str, Any]:
     """Return defaults that apply to every plugin via ``ParameterSet.common``."""
 
-    shared_names: set[str] | None = None
-    for definitions in _PLUGIN_PARAMETERS.values():
-        names = {definition.name for definition in definitions}
-        shared_names = names if shared_names is None else shared_names & names
+    per_plugin_definitions: list[dict[str, ParameterDefinition]] = [
+        {definition.name: definition for definition in definitions}
+        for definitions in _PLUGIN_PARAMETERS.values()
+    ]
+
+    if not per_plugin_definitions:
+        return {}
+
+    shared_names = set(per_plugin_definitions[0])
+    for definitions in per_plugin_definitions[1:]:
+        shared_names &= set(definitions)
 
     if not shared_names:
         return {}
 
     defaults: dict[str, Any] = {}
-    sentinel = object()
     for name in sorted(shared_names):
-        reference_default: Any = sentinel
-        consistent = True
-        for definitions in _PLUGIN_PARAMETERS.values():
-            for definition in definitions:
-                if definition.name != name:
-                    continue
-                if reference_default is sentinel:
-                    reference_default = definition.default
-                elif definition.default != reference_default:
-                    consistent = False
-                break
-            if not consistent:
-                break
-        if consistent and reference_default is not sentinel:
+        reference_default = per_plugin_definitions[0][name].default
+        if all(
+            definitions[name].default == reference_default
+            for definitions in per_plugin_definitions[1:]
+        ):
             defaults[name] = reference_default
     return defaults
 
