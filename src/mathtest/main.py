@@ -302,7 +302,7 @@ def write_config(
         "",
     ]
     yaml_payload = yaml.safe_dump(template, sort_keys=False)
-    content = "\n".join(header_lines) + yaml_payload
+    content = "\n".join(header_lines) + "\n" + yaml_payload
 
     if output is None:
         typer.echo(content)
