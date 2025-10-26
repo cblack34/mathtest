@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 from click.testing import Result
 from typer.testing import CliRunner
@@ -17,7 +16,12 @@ from mathtest.coordinator import (
     ParameterSet,
     PluginRequest,
 )
-from mathtest.main import _PLUGIN_PARAMETERS, _normalize_argv, app
+from mathtest.main import (
+    _PLUGIN_PARAMETERS,
+    _collect_global_parameter_defaults,
+    _normalize_argv,
+    app,
+)
 
 
 def _invoke(runner: CliRunner, args: list[str]) -> Result:
@@ -330,23 +334,7 @@ def test_write_config_command_generates_template(tmp_path: Path) -> None:
     assert "plugins" in template
 
     common_defaults = template["common"]
-    shared_names: set[str] | None = None
-    for definitions in _PLUGIN_PARAMETERS.values():
-        names = {definition.name for definition in definitions}
-        shared_names = names if shared_names is None else shared_names & names
-
-    if shared_names:
-        for name in shared_names:
-            expected: Any | None = None
-            for definitions in _PLUGIN_PARAMETERS.values():
-                for definition in definitions:
-                    if definition.name == name:
-                        expected = definition.default
-                        break
-                if expected is not None:
-                    break
-            assert name in common_defaults
-            assert common_defaults[name] == expected
+    assert common_defaults == _collect_global_parameter_defaults()
 
     plugin_defaults = template["plugins"]
     for plugin_name, definitions in _PLUGIN_PARAMETERS.items():

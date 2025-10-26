@@ -109,6 +109,7 @@ def _build_parameter_template() -> dict[str, Any]:
 
     return template
 
+
 _CLICK_TYPE_ALIASES: dict[str, click.ParamType | type[Any]] = {
     "int": int,
     "float": float,
