@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from click.testing import Result
 from typer.testing import CliRunner
+
+import yaml
 
 from mathtest.coordinator import (
     Coordinator,
@@ -14,7 +17,7 @@ from mathtest.coordinator import (
     ParameterSet,
     PluginRequest,
 )
-from mathtest.main import _normalize_argv, app
+from mathtest.main import _PLUGIN_PARAMETERS, _normalize_argv, app
 
 
 def _invoke(runner: CliRunner, args: list[str]) -> Result:
@@ -292,3 +295,48 @@ def test_cli_help_sections_group_plugins() -> None:
 
     assert "Addition Options" in output
     assert "--addition-min-operand" in output
+
+
+def test_write_config_command_generates_template(tmp_path: Path) -> None:
+    """The write-config command should emit a comprehensive YAML template."""
+
+    runner = CliRunner()
+    destination = tmp_path / "settings.yaml"
+
+    result = runner.invoke(app, ["write-config", "--output", str(destination)])
+
+    assert result.exit_code == 0, result.output
+    assert destination.exists()
+
+    content = destination.read_text(encoding="utf-8")
+    template = yaml.safe_load(content)
+
+    assert isinstance(template, dict)
+    assert "common" in template
+    assert "plugins" in template
+
+    common_defaults = template["common"]
+    shared_names: set[str] | None = None
+    for definitions in _PLUGIN_PARAMETERS.values():
+        names = {definition.name for definition in definitions}
+        shared_names = names if shared_names is None else shared_names & names
+
+    if shared_names:
+        for name in shared_names:
+            expected: Any | None = None
+            for definitions in _PLUGIN_PARAMETERS.values():
+                for definition in definitions:
+                    if definition.name == name:
+                        expected = definition.default
+                        break
+                if expected is not None:
+                    break
+            assert name in common_defaults
+            assert common_defaults[name] == expected
+
+    plugin_defaults = template["plugins"]
+    for plugin_name, definitions in _PLUGIN_PARAMETERS.items():
+        assert plugin_name in plugin_defaults
+        plugin_section = plugin_defaults[plugin_name]
+        for definition in definitions:
+            assert plugin_section[definition.name] == definition.default
