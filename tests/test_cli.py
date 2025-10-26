@@ -7,7 +7,6 @@ from pathlib import Path
 
 from click.testing import Result
 from typer.testing import CliRunner
-
 import yaml
 
 from mathtest.coordinator import (

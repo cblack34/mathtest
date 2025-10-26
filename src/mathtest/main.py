@@ -59,9 +59,6 @@ _PLUGIN_PARAMETERS = _collect_plugin_parameters()
 def _collect_global_parameter_defaults() -> dict[str, Any]:
     """Return defaults that apply to every plugin via ``ParameterSet.common``."""
 
-    if not _PLUGIN_PARAMETERS:
-        return {}
-
     shared_names: set[str] | None = None
     for definitions in _PLUGIN_PARAMETERS.values():
         names = {definition.name for definition in definitions}
@@ -311,7 +308,7 @@ def write_config(
     content = "\n".join(header_lines) + yaml_payload
 
     if output is None:
-        typer.echo(content, nl=False)
+        typer.echo(content)
         return
 
     try:
