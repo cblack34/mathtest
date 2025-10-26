@@ -294,7 +294,7 @@ class MultiplicationPlugin:
         )
         data = {
             "operands": [multiplicand, multiplier],
-            "operator": "x",
+            "operator": "X",
             "answer": answer,
             "min_digit_chars": self._min_digit_chars,
         }

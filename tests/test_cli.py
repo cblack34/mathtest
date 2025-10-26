@@ -270,3 +270,25 @@ def test_cli_generates_clock_problems(tmp_path: Path) -> None:
     first = serialized[0]["data"]
     assert first["minute"] % first["minute_interval"] == 0
     assert first["answer"].endswith(f":{first['minute']:02d}")
+
+
+def test_cli_help_sections_group_plugins() -> None:
+    """Help output should summarize plugins and isolate override options."""
+
+    runner = CliRunner()
+    result = _invoke(runner, ["--help"])
+
+    assert result.exit_code == 0, result.stdout
+
+    output = result.stdout
+    assert "KWARGS" not in output
+    assert "Plugins" in output
+    assert "Generate vertically stacked addition problems" in output
+
+    plugins_start = output.index("Plugins")
+    options_block = output[:plugins_start]
+    assert "--addition" not in options_block
+    assert "--addition-min-operand" not in options_block
+
+    assert "Addition Options" in output
+    assert "--addition-min-operand" in output
