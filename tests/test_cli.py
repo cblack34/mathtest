@@ -7,6 +7,7 @@ from pathlib import Path
 
 from click.testing import Result
 from typer.testing import CliRunner
+import yaml
 
 from mathtest.coordinator import (
     Coordinator,
@@ -14,7 +15,12 @@ from mathtest.coordinator import (
     ParameterSet,
     PluginRequest,
 )
-from mathtest.main import _normalize_argv, app
+from mathtest.main import (
+    _PLUGIN_PARAMETERS,
+    _collect_global_parameter_defaults,
+    _normalize_argv,
+    app,
+)
 
 
 def _invoke(runner: CliRunner, args: list[str]) -> Result:
@@ -276,7 +282,7 @@ def test_cli_help_sections_group_plugins() -> None:
     """Help output should summarize plugins and isolate override options."""
 
     runner = CliRunner()
-    result = _invoke(runner, ["--help"])
+    result = _invoke(runner, ["generate", "--help"])
 
     assert result.exit_code == 0, result.stdout
 
@@ -292,3 +298,46 @@ def test_cli_help_sections_group_plugins() -> None:
 
     assert "Addition Options" in output
     assert "--addition-min-operand" in output
+
+
+def test_cli_top_level_help_is_default() -> None:
+    """Requesting help without a command should show application help."""
+
+    runner = CliRunner()
+    result = _invoke(runner, ["--help"])
+
+    assert result.exit_code == 0, result.stdout
+    assert "Usage:" in result.stdout
+    assert "COMMAND [ARGS]" in result.stdout
+    assert "Commands" in result.stdout
+    assert "generate" in result.stdout
+    assert "write-config" in result.stdout
+
+
+def test_write_config_command_generates_template(tmp_path: Path) -> None:
+    """The write-config command should emit a comprehensive YAML template."""
+
+    runner = CliRunner()
+    destination = tmp_path / "settings.yaml"
+
+    result = runner.invoke(app, ["write-config", "--output", str(destination)])
+
+    assert result.exit_code == 0, result.output
+    assert destination.exists()
+
+    content = destination.read_text(encoding="utf-8")
+    template = yaml.safe_load(content)
+
+    assert isinstance(template, dict)
+    assert "common" in template
+    assert "plugins" in template
+
+    common_defaults = template["common"]
+    assert common_defaults == _collect_global_parameter_defaults()
+
+    plugin_defaults = template["plugins"]
+    for plugin_name, definitions in _PLUGIN_PARAMETERS.items():
+        assert plugin_name in plugin_defaults
+        plugin_section = plugin_defaults[plugin_name]
+        for definition in definitions:
+            assert plugin_section[definition.name] == definition.default
