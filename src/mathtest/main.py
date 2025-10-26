@@ -578,8 +578,9 @@ def _normalize_argv(args: Sequence[str]) -> list[str]:
     normalized = list(args)
     first = normalized[0]
     known_commands = {"generate", "write-config"}
+    passthrough_flags = {"-h", "--help"}
 
-    if first in known_commands:
+    if first in known_commands or first in passthrough_flags:
         return normalized
 
     if first.startswith("-"):
