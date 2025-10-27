@@ -1,112 +1,343 @@
-# Agent Instructions
+# AGENTS.md
 
-## Package Management
-- Use [uv](https://github.com/astral-sh/uv) for all Python package management.
-  - Add production packages: `uv add <package>`
-  - Add development packages: `uv add --group dev <package>`
-- Always use the `.venv` environment when running code for this repository.
+A single, authoritative brief for AI coding agents working in this repository. Keep it short, specific, and up to date. Treat this file as the **source of truth** for agent behavior and constraints.
 
-## Code Style & Quality
-- Use absolute imports throughout the codebase.
-- Follow [PEP8](https://peps.python.org/pep-0008/) for code style and formatting.
-- Use [Black](https://black.readthedocs.io/) for code formatting: `black .`
-- Use [isort](https://pycqa.github.io/isort/) for import organization: `isort .`
-- Use [mypy](http://mypy-lang.org/) for static type checking: `mypy .`
-- Use Google-style docstrings for all public functions, classes, and methods.
-- Adhere to Clean Code principles (Uncle Bob) and ArjanCodes' best practices for readability, maintainability, and modularity.
-- Proactively refactor to avoid code smells and anti-patterns.
-- Practice dependency injection to decouple components and improve testability.
-- Prefer immutable data structures for fixed data (e.g., tuples over lists).
-- Use the standard library's `logging` module for all logging (never use print for logging).
-- Handle exceptions gracefully; avoid bare `except` clauses.
-- Validate all inputs and never expose sensitive data.
-
-## Testing
-- Use [pytest](https://docs.pytest.org/) for all testing: `uv run pytest`
-- Use [pytest-cov](https://pytest-cov.readthedocs.io/) for coverage: `uv run pytest --cov`
-
-
-## Data & Configuration
-- Use [pydantic](https://docs.pydantic.dev/) for data models.
-- Use [pydantic-settings](https://docs.pydantic.dev/latest/usage/pydantic_settings/) for configuration management. Never hardcode secrets or config in code.
-- Use [SQLModel](https://sqlmodel.tiangolo.com/) for ORM/database models.
-
-## CLI Applications
-- Use [typer](https://typer.tiangolo.com/) for CLI applications.
-
-## Documentation
-- Keep the README and all documentation up to date.
-- Use clear, consistent formatting and section headers.
-
-## Context7 Integration
-- To enable up-to-date code and documentation context, configure Context7 MCP as follows:
-
-ignore the API Key requirements. It is an option, but not required for local usage.
-
-```json
-{
-  "mcpServers": {
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"]
-    }
-  }
-}
-```
-
-- For remote Context7 MCP, use:
-
-```json
-{
-  "mcpServers": {
-    "context7": {
-      "url": "https://mcp.context7.com/mcp"
-    }
-  }
-}
-```
-
-- For more, see the [Context7 documentation](https://github.com/upstash/context7).
+> If any instruction here conflicts with other docs, **this file wins for agents**. Humans can use README/CONTRIBUTING; agents must follow AGENTS.md.
 
 ---
 
-**Summary:**
-- Use modern, robust tools for Python development.
-- Enforce code quality, security, and maintainability.
-- Structure code into small, modular, and testable components.
-- Keep documentation and configuration current.
+## 1) Purpose & Scope
 
+* Enable safe, high‑quality, repeatable changes to this codebase using OpenAI‑class coding models.
+* Optimize for correctness, security, maintainability, and testability.
+* Minimize tokens/cost by using targeted context and efficient workflows.
+* Applies to local and CI agents, including ChatGPT/Codex-style tools, Assistants, or CLI agents.
 
-## Core Principles
-Follow SOLID principles to ensure clean, scalable code:
-- **Single Responsibility Principle (SRP)**: Each class/module has one reason to change. E.g., plugins handle problem generation only (SDD.md, 3.2.3); coordinator manages workflow (SDD.md, 3.2.2).
-- **Open-Closed Principle (OCP)**: Open for extension, closed for modification. Use Protocols/interfaces for plugins/output (interface.py) to add features without altering core (PRD.md, 3.4).
-- **Liskov Substitution Principle (LSP)**: Subtypes must be substitutable. E.g., any OutputGenerator implementation works without breaking coordinator (SDD.md, 3.2.5).
-- **Interface Segregation Principle (ISP)**: Keep interfaces minimal. Protocols define only necessary methods (SDD.md, 3.2.3/3.2.5).
-- **Dependency Inversion Principle (DIP)**: Depend on abstractions. Coordinator uses OutputGenerator interface, not concrete PDF (SDD.md, 3.3).
+**Non‑goals:** speculative refactors, large cross‑cutting redesigns, or vendor‑specific lock‑in without approval.
 
-Additional best practices:
-- **Pythonic Code**: Adhere to PEP 8/257 (style/docstrings), use built-in generics (e.g., dict[str, any]), avoid typing aliases. In Python 3.14, leverage lazy annotations for performance.
-- **Test-Driven Development (TDD)**: Generate code with >80% coverage (PRD.md, 5); use pytest for unit/integration tests (MVP.md, Phase 5).
-- **Validation**: Use Pydantic for any models/params (SDD.md, 3.4); validate early to prevent runtime errors.
-- **Error Handling**: Log warnings, raise meaningful exceptions; no silent failures (PRD.md, 5).
-- **Performance/Scalability**: Optimize for 100+ problems (<5s); entry points for plugins (SDD.md, 3.2.3).
-- **Documentation**: Docstrings for all methods/classes; reference PRD/SDD/MVP in comments where relevant.
+---
 
-## OpenAI-Specific Best Practices for AI Agents
-Incorporate these from OpenAI's guidelines for building agents (e.g., Assistants API, Codex for code generation):
-- **Prompt Engineering**: Use clear, specific prompts with context from PRD/SDD/MVP.md. E.g., "Implement addition plugin per SDD.md 3.2.3 with stacked SVG, following SOLID SRP."
-- **Tool Usage**: Agents should use tools (e.g., function calling) for tasks like data retrieval; in Mathtest, integrate with Pydantic for validation.
-- **Reasoning and Planning**: Break tasks into steps; max single-agent efficiency before multi-agent (e.g., coordinator as mediator).
-- **Memory and Context**: Retain project context (e.g., JSON override in PRD.md 3.2); use existing docs for routines.
-- **Model Selection**: Start with powerful models (e.g., GPT-4 equivalent) for complex tasks; simplify for cheaper ones.
-- **Iteration and Testing**: Generate, test with pytest, refine—build smart then dumb down for reliability.
-- **Safety/Reliability**: Prioritize workflows; avoid hallucinations by grounding in PRD/SDD/MVP.md.
+## 2) Quickstart (Commands agents may run)
 
-## Project-Specific Guidelines
-- **Alignment with Docs**: Code must match PRD.md (features, e.g., JSON override in 3.2), SDD.md (architecture, e.g., vertical stacking in plugins, 3.2.3), MVP.md (scope, e.g., addition/subtraction only).
-- **MVP Focus**: Limit to addition, subtraction (MVP.md); expand later.
-- **Extensibility**: Ensure coordinator is UI-agnostic (PRD.md, 3.4); use Protocols for loose coupling.
-- **Review AI Output**: Always manually review for smells (e.g., tight coupling); run mypy/black/pytest.
+Always use the local **.venv** managed by **uv**.
 
-Agents following these will produce high-quality contributions. For updates, consult the latest PRD/SDD/MVP.md.
+```bash
+# Create & sync environment
+uv venv --seed --python 3.14
+uv sync
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Add packages
+uv add <package>                 # prod deps
+uv add --group dev <package>     # dev deps
+
+# Code quality
+uv run black .
+uv run isort .
+uv run mypy .
+
+# Tests
+uv run pytest                     # fast unit tests
+uv run pytest --cov               # with coverage
+
+```
+
+---
+
+## 3) Code Style & Quality (enforced)
+
+* **Imports:** use **absolute imports** only.
+* **Style:** follow **PEP 8**; format with **Black**; organize imports with **isort**.
+* **Types:** **mypy** required on all changed files; prefer precise types; avoid `Any` leaks.
+* **Docstrings:** use **Google‑style** for all public symbols.
+* **Clean Code principles:** small, cohesive modules; meaningful names; single responsibility.
+* **Refactoring:** proactively remove code smells/anti‑patterns; prefer composition over inheritance.
+* **Dependency injection:** pass dependencies in constructors/factories; avoid global state.
+* **Immutability:** use immutable types for fixed data (e.g., tuples, `frozenset`).
+* **Logging:** use `logging` (never `print`) with structured messages; no secrets in logs.
+* **Exceptions:** handle narrowly; avoid bare `except`; raise meaningful errors.
+* **Input validation:** validate early (use Pydantic models/validators where applicable).
+* **Security:** never hard‑code secrets; use settings and env vars; scrub sensitive data from outputs.
+* **Python 3.14 annotations:** Lazy by default (PEP 649/749). Do **not** use `from __future__ import annotations`; avoid quoted forward refs. For runtime needs, use `typing.get_type_hints()` or `annotationlib.get_annotations()`.
+
+---
+
+## 4) Testing Policy
+
+* **Framework:** `pytest` with `pytest-cov`.
+* **Coverage target:** ≥ **80%** for new/changed code.
+* **Kinds of tests:** unit first; integration where value is high; avoid end‑to‑end by default.
+* **Determinism:** no network or time‑based flakiness; use fakes/mocks.
+* **Test gen:** when creating code, also generate corresponding tests.
+
+Run:
+
+```bash
+uv run pytest --maxfail=1 -q
+uv run pytest --cov
+```
+
+---
+
+## 5) Data Models & Configuration
+
+* **Data models:** use **Pydantic**.
+* **Settings:** use **pydantic‑settings**; keep `.env`/secrets out of VCS.
+* **ORM/DB:** use **SQLModel** for models and persistence.
+
+---
+
+## 6) CLI Applications
+
+* Use **Typer** for CLIs (type‑safe, autocompletion, built‑in help).
+
+---
+
+## 7) Documentation
+
+* Keep `README.md` and in‑repo docs current.
+* Use clear headings, task‑oriented examples, and short code snippets.
+* Reference PRD/SDD/MVP where relevant in docstrings or comments.
+
+---
+
+## 8) External Docs via Context7 MCP
+
+Use Context7 **only** to fetch *external library/framework documentation* (e.g., **pytest**, **pydantic**, **SQLModel**, **Typer**) into the model’s context. Do **not** use it for our internal modules or project files.
+
+**Why/what it does:** Context7 provides up‑to‑date, version‑specific docs and examples pulled from official sources and injects them into the prompt. It’s purpose‑built for dependency APIs, not for reading this repo. Configure it in your MCP client (e.g., Cursor, Claude Desktop) and request specific libraries + versions. Examples:
+
+* “Use context7 to load `pytest` fixtures API (pytest==8.x)`.”
+* “Use context7 to load `pydantic-settings` 2.x configuration examples.”
+
+**Configuration (local):**
+
+```json
+{
+  "mcpServers": {
+    "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }
+  }
+}
+```
+
+**Configuration (remote):**
+
+```json
+{
+  "mcpServers": {
+    "context7": { "url": "https://mcp.context7.com/mcp" }
+  }
+}
+```
+
+**Usage rules:**
+
+* Scope requests narrowly: library name + **pinned version** + topic (e.g., “`sqlmodel 0.0.x` session lifecycle”).
+* Prefer *exact* endpoints/pages (symbols, functions) over broad topic pulls.
+* Never paste large doc dumps into code/comments; summarize, cite section names, and keep snippets minimal.
+* Treat third‑party MCP servers as **untrusted**: no secrets; review outputs; keep token budgets tight; log library + version pulled.
+* For internal code context, read files directly from the repo; do **not** use Context7.
+
+**Security notes:**
+
+* Use only trusted MCP servers (e.g., the official `@upstash/context7-mcp`). Audit community servers before use; lock versions and review permissions. Supply‑chain incidents with malicious MCP servers have been reported — rotate credentials if compromise is suspected.
+
+---
+
+## 9) Core Architectural Principles
+
+Follow **SOLID**:
+
+* **SRP:** each module has one reason to change (e.g., plugins only generate problems; coordinator manages workflow).
+* **OCP:** extend via protocols/interfaces; do not modify stable cores.
+* **LSP:** any subtype must be drop‑in substitutable.
+* **ISP:** keep interfaces minimal and focused.
+* **DIP:** depend on abstractions; consumers import protocols, not concrete classes.
+
+**Additional:**
+
+* Pythonic code (PEP 8/257), modern typing (`dict[str, T]` etc.).
+* Validation with Pydantic; fail fast with clear errors.
+* Performance: optimize for 100+ problems < 5s where specified; prefer linear algorithms; cache pure functions when helpful.
+* Coordinator must be **UI‑agnostic**; expose clean programmatic interfaces.
+
+### 9.1 Python 3.14 Feature Guidance
+
+**Version target:** Python 3.14 across the repo.
+
+**Deferred (lazy) annotations — PEP 649 & PEP 749:**
+
+* Remove `from __future__ import annotations` (deprecated; no longer needed in 3.14).
+* Don’t quote forward references.
+* If you need runtime annotation values, use `annotationlib.get_annotations()` or `typing.get_type_hints()`; avoid reading `__annotations__` directly (especially on classes). See porting notes in 3.14 docs.
+
+**Template string literals — PEP 750:**
+
+* Use `t"..."` only when you need **templating semantics** (placeholders intended for later substitution). Keep using f-strings for straightforward interpolation.
+* Do not mix `t` and `f` prefixes in the same literal; don’t concatenate template objects and plain strings without explicit conversion.
+* For untrusted input, always validate/escape via a dedicated formatter function before rendering templates.
+
+**Multiple interpreters — PEP 734:**
+
+* Prefer the stdlib `concurrent.interpreters` module when you need isolated, in‑process concurrency.
+* Avoid cross‑interpreter object sharing; communicate via queues/channels.
+
+**Free‑threaded Python (no‑GIL) — PEP 779 / PEP 703):**
+
+* Supported in 3.14 but **optional**. Do not rely on the GIL for safety; make shared state thread‑safe.
+* Only enable no‑GIL CI when dependencies are compatible.
+
+**Porting checklist to 3.14:**
+
+* [ ] Remove all `from __future__ import annotations`.
+* [ ] Unquote forward refs; ensure libraries that introspect annotations use `annotationlib`/`typing.get_type_hints`.
+* [ ] Audit any direct reads of `__annotations__` and replace with supported APIs.
+* [ ] Keep templating secure; adopt t‑strings only where templates are truly needed.
+
+---
+
+## 10) OpenAI‑Specific Agent Practices
+
+### 10.1 Reasoning & Planning
+
+* Break work into **plan → execute → verify → summarize**.
+* Keep detailed reasoning **internal**; surface concise rationales only.
+* Before code changes, write a short **plan** and a **test plan**.
+
+### 10.2 Tool Use
+
+* Use tools for retrieval, execution, and validation: running tests, type checks, linters.
+* Prefer structured outputs (JSON) for intermediate steps; validate with Pydantic where possible.
+
+### 10.3 Model Selection
+
+* Use strongest available model for **planning/design**; switch to efficient model for **repetitive edits**.
+* Avoid unnecessary re‑prompting; cache facts from docs; reuse context.
+
+### 10.4 Iteration & Self‑check
+
+* After generating code, **run** `mypy`, `pytest`, and linters; fix before proposing PRs.
+* Verify outputs against requirements in PRD/SDD/MVP and this file.
+
+### 10.5 Safety & Reliability
+
+* Never fabricate APIs or files; if unknown, state what is missing and request targeted docs.
+* Avoid destructive changes (schema drops, API removals) without explicit approval.
+* Respect licenses and third‑party attribution.
+
+---
+
+## 11) Prompting Patterns (for agents)
+
+Use these compact templates to steer actions. Keep to the token budget and avoid fluff.
+
+### 11.1 Task Brief (single feature)
+
+```
+You are a coding agent working in this repo. Goal: <one‑sentence outcome>.
+Constraints: follow AGENTS.md; only edit files under <paths>; keep diffs small.
+Plan: list 3‑5 steps.
+Deliverables: PR with code + tests, summary explaining design/trade‑offs.
+Verification: run mypy/pytest/linters; include results.
+```
+
+### 11.2 Bug Fix
+
+```
+Given failing test <path::name> and error <message>, fix minimal surface area.
+Include regression test. Keep public API stable unless specified.
+```
+
+### 11.3 Refactor (safe)
+
+```
+Refactor for readability/maintainability without changing behavior.
+Add or update tests to prove no behavior change.
+```
+
+### 11.4 Retrieval Discipline
+
+```
+Before coding, list exact files to read (max N). Summarize key constraints in 5 bullets.
+If info is missing, stop and request specific docs.
+```
+
+### 11.5 Output Discipline
+
+```
+Return: (1) diff or patch; (2) commands you ran; (3) test/linters output; (4) brief rationale.
+No verbose chain‑of‑thought.
+```
+
+---
+
+## 12) Project‑Specific Guardrails
+
+* **Scope (MVP):** implement **addition** and **subtraction** only unless directed otherwise.
+* **Extensibility:** plugins vertically stack; coordinator mediates; use Protocols for loose coupling.
+* **Review:** humans review for smells/tight coupling; always run `mypy/black/pytest` before proposing changes.
+
+---
+
+## 13) PR & Commit Conventions
+
+* Use **Conventional Commits** (e.g., `feat:`, `fix:`, `docs:`, `refactor:`).
+* PR description must include:
+
+  * Problem statement & acceptance criteria
+  * Approach & rationale (brief)
+  * Test plan & results (paste `pytest --cov` summary)
+  * Risk/Security considerations
+
+---
+
+## 14) Stop Conditions
+
+Agents must stop and request approval when:
+
+* A change alters public APIs, CLI interfaces, or database schemas.
+* Any migration, data deletion, or large refactor is proposed.
+* Coverage would drop below target or tests cannot be made deterministic.
+* Secrets/credentials would be introduced or rotated.
+
+---
+
+## 15) Checklist (agent must satisfy before proposing PR)
+
+* [ ] Read relevant sections of PRD.md/SDD.md/MVP.md.
+* [ ] Kept edits minimal, modular, and in‑scope.
+* [ ] Added/updated **tests** and **docstrings**.
+* [ ] Ran: `black`, `isort`, `mypy`, `pytest --cov` (all green, coverage ≥ 80%).
+* [ ] No prints; only `logging`. No bare `except`.
+* [ ] No secrets or hard‑coded config; used pydantic‑settings.
+* [ ] Absolute imports only.
+* [ ] Removed all `from __future__ import annotations`; unquoted forward references; updated any annotation-introspection to use `annotationlib.get_annotations`/`typing.get_type_hints`.
+* [ ] If using templating (SQL/HTML/shell), prefer t-strings with an explicit processing function; no f-strings for untrusted input.
+* [ ] Changelog/PR body completed with rationale and test results.
+
+---
+
+## 16) Appendix: Commands & Tools (recap)
+
+* **uv** for env/pkg mgmt (see Quickstart).
+* **Formatting & QA:** `black`, `isort`, `mypy`, `pytest`, `pytest-cov`.
+* **Models & Config:** `pydantic`, `pydantic‑settings`.
+* **ORM:** `SQLModel`.
+* **CLI:** `typer`.
+
+---
+
+## 17) Maintenance
+
+* Keep this file under **500 lines**; prune stale rules.
+* Update when dependencies, build, or policies change.
+* For monorepos, place an `AGENTS.md` at the root and optionally in key subprojects with non‑conflicting, more specific rules.
+
+---
+
+## 18) Summary for Agents
+
+* Use modern, robust Python tooling (`uv`, `.venv`).
+* Enforce code quality, security, and maintainability.
+* Keep changes small, modular, tested, and documented.
+* Ground in PRD/SDD/MVP and this AGENTS.md; do not guess.
