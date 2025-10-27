@@ -1,171 +1,141 @@
-### Updated Product Requirements Document (PRD) for Mathtest
+# Product Requirements Document (PRD) for MathTest
 
-#### 1. Overview
+## 1. Product Overview
 
-**Product Name**: Mathtest  
-**Version**: 0.1  
-**Date**: October 23, 2025  
-**Objective**: Mathtest is a Python-based application designed to generate customizable math tests with a plugin
-architecture, initially supporting addition, subtraction, multiplication, division, and clock-reading problems. It
-provides a Typer-based CLI with optional YAML configuration, reproducible tests via JSON output, and advanced PDF
-formatting options, built for extensibility to a new UI (e.g., FastAPI) without altering core coordination logic.
+MathTest is a sophisticated command-line application engineered to facilitate the creation of customizable, printable
+math worksheets primarily for elementary school students. It leverages a dual-plugin architecture: generation plugins to
+produce diverse math problems (such as arithmetic operations and time-telling via analog clocks) and output plugins to
+render the results in various formats. In the MVP, prioritize implementing generation plugins for addition, subtraction,
+multiplication, division, and clock problems, alongside the "traditional-pdf" output plugin for generating PDFs with
+structured layouts including titles, student metadata fields, scalable visual representations of problems, and an
+optional enumerated answer key. JSON output is treated as a special-case output plugin that can coexist with others for
+enhanced flexibility in saving and reproducing worksheets. The system emphasizes deterministic behavior for
+reproducibility, comprehensive configurability through CLI flags and YAML files, and robust error handling to ensure a
+seamless user experience. This design allows educators to generate tailored practice materials efficiently while
+providing extensibility for developers to introduce new problem types or output formats without altering core logic.
 
-#### 2. Target Audience
+### 1.1 Target Audience
 
-- **Educators and Teachers**: Create tailored tests with specific layouts, answer keys, and problem types.
-- **Students**: Practice with reproducible or custom tests.
-- **Developers**: Extend with new plugins using entry points.
+- Educators and teachers who require quick generation of varied math drills with consistent formatting and answer keys.
+- Parents and homeschoolers seeking reproducible worksheets for consistent practice sessions.
+- Software developers or contributors interested in extending the tool with custom plugins for specialized problem sets
+  or alternative output renderers, such as HTML or image-based formats.
 
-#### 3. Key Features
+### 1.2 Key Features
 
-##### 3.1 Core Functionality
+- **Generation Plugin Selection and Configuration**: Users can enable multiple generation plugins via separate CLI
+  flags (e.g., `--addition`, `--subtraction`) and provide overrides for plugin-specific parameters (e.g.,
+  `--addition-min-operand 0 --addition-max-operand 10`). This allows mixing problem types in a single worksheet, with
+  problems interleaved in a deterministic manner when seeds are applied.
+- **Output Plugin Selection and Configuration**: Specify one or more output plugins using the repeatable
+  `--output-plugin <name>` flag (e.g., `--output-plugin traditional-pdf --output-plugin json`). Each can have dynamic
+  overrides (e.g., `--traditional-pdf-columns 4 --traditional-pdf-margin-inches 0.75`). JSON output is compatible with
+  multiple selections and handles serialization of problem data for later reproduction.
+- **Worksheet Generation Capabilities**: Produce worksheets with configurable problems per test (via
+  `--problems-per-test`, default 10) and multiple tests (via `--test-count`, default 1). Problems are rendered
+  visually (e.g., vertical arithmetic stacks or analog clock faces) with space for student answers.
+- **Reproducibility and Persistence**: Support JSON input for exact recreation of worksheets (via `--json-input`) and
+  JSON output for saving generated content (integrated as an output plugin but allowable alongside others).
+- **Configuration Flexibility**: Merge settings from plugin defaults, YAML files (with sections for common,
+  problem-plugins, and output-plugins), and CLI overrides, ensuring CLI takes precedence.
+- **Logging and Error Handling**: Implement structured logging for all key operations (e.g., config merging, plugin
+  instantiation, generation steps) and provide descriptive, user-friendly error messages for issues like invalid
+  parameters or plugin conflicts.
+- **Help and Discoverability**: Dynamically generate CLI help with grouped panels detailing available plugins, their
+  parameters, descriptions, defaults, and types for intuitive usage.
 
-- **Plugin-Based Problem Generation**:
-    - Supports full-named plugins: addition, subtraction, multiplication, division, clock-reading.
-    - Loaded dynamically via `pyproject.toml` entry points within the `mathtest` package.
-    - Each plugin returns a `Problem` object with `svg` (resizable output) and `data` (problem state, including `answer`
-      for answer keys).
-    - Plugins support generating SVG from a provided `data` dict (e.g., `{"operands": [5, 3], "answer": 8}` for
-      addition) without random generation, enabling exact reproduction from JSON input.
-    - For addition, subtraction, and multiplication problems, the SVG rendering must use vertical stacking: the top
-      operand above the bottom operand, with the operator to the left of the bottom operand, and a horizontal line under
-      the bottom operand (e.g., like "5 + 9" stacked as in the provided PDF).
-- **CLI Interface**:
-    - Built with Typer, using flag-based type selection (e.g., `--addition`, `--subtraction`).
-    - Options include `--total-problems`, `--questions-per-page`, `--num-tests`, `--grid-cols`, `--student-name`,
-      `--date`, `--output`, and `--answer-key`.
-    - Supports optional YAML configuration (`--config`) with `common` and per-plugin sections, overridden by CLI flags (
-      e.g., `--addition-max-operand`).
-- **PDF Assembly**:
-    - Assembles SVGs into a PDF with customizable layout (grid, pages, answer keys) using a library like `reportlab`.
+### 1.3 Non-Functional Requirements
 
-##### 3.2 Reproducible Tests
+- **Performance**: Ensure generation and rendering for worksheets up to 100 problems complete in under 5 seconds on
+  standard hardware, with efficient scaling for multiple tests.
+- **Usability**: The CLI should be intuitive, with validation for conflicts (e.g., multiple non-compatible outputs if
+  future plugins require it) and clear feedback; help text should include examples of flag usage without code snippets.
+- **Reliability**: Use immutable data structures to prevent unintended modifications; achieve test coverage exceeding
+  85% across unit and integration tests; handle edge cases like zero problems, invalid bounds, or missing configs
+  gracefully without crashes.
+- **Security**: Employ safe loading for YAML and JSON to mitigate injection risks; restrict plugins to local execution
+  without network or file system vulnerabilities.
+- **Compatibility**: Target Python 3.12+ environments; ensure cross-platform consistency in rendering (e.g., PDF fonts
+  and SVG handling).
+- **Maintainability**: Modular components with entry points for plugins; separate test packages for unit (isolated
+  component checks) and integration (end-to-end workflows); adherence to clean code practices like DRY, SRP, and
+  meaningful naming.
 
-- **JSON Output**:
-    - `--json-output <filename>` saves a JSON file with `data` objects from each `Problem`, excluding SVG data (e.g.,
-      `{"type": "addition", "data": {"operands": [5, 3], "operator": "+", "answer": 8}}`).
-- **JSON Input**:
-    - `--json-input <filename>` recreates the exact test from JSON by passing the `data` dict to plugins, which generate
-      corresponding SVGs without random generation. JSON input overrides type flags.
-- **Custom Test Creation**:
-    - Users edit JSON to craft custom tests (e.g., specific operands or clock times), with plugins validating `data`.
+## 2. Functional Requirements
 
-##### 3.3 Parameter Management
+### 2.1 CLI Interface
 
-- **Dynamic CLI Flags**:
-    - Plugins define parameters (e.g., `max-operand`, `min-operand`) via `get_parameters`, generating flags like
-      `--addition-max-operand`.
-    - Clock-reading uses `--clock-12-hour` (default), `--clock-24-hour`, and `--clock-minute-interval <interval>` (
-      default 15, option 5).
-- **Optional YAML Configuration**:
-    - Nested structure: `common` for global defaults, per-plugin sections for overrides (e.g.,
-      `common: {max-operand: 10}`, `addition: {max-operand: 12}`).
-    - CLI flags take precedence; YAML is optional and provides a convenient default setup if provided.
-- **Parameter Handling**:
-    - Full param dict passed to plugins, ignored if unused, ensuring flexibility. Plugins use `data` from JSON input to
-      deterministic SVG generation.
+- **Invocation**: Support `mathtest generate` explicitly, but allow implicit execution when flags are provided
+  directly (e.g., `mathtest --addition --problems-per-test 5`).
+- **Generation Flags**: Enable plugins with separate flags (e.g., `--addition` to include addition problems); provide
+  overrides as `--<plugin-name>-<param-name>` (e.g., `--clock-minute-interval 15`). Distribute problems across enabled
+  plugins proportionally.
+- **Output Flags**: Use repeatable `--output-plugin <name>` for selection (e.g., `--output-plugin traditional-pdf`);
+  overrides as `--<output-name>-<param-name>` (e.g., `--traditional-pdf-answer-key true`). Allow multiple, but
+  special-case JSON for compatibility.
+- **General Flags**: `--problems-per-test <int>` (problems per worksheet, default 10), `--test-count <int>` (number of
+  worksheets, default 1), `--config <path>` (YAML file), `--json-input <path>` (for reproduction).
+- **Validation and Feedback**: Error on invalid combinations (e.g., negative counts, bounds mismatches); provide
+  descriptive messages like "min-operand must be <= max-operand".
+- **Help System**: Grouped panels (e.g., "Problem Plugins" listing enables and descriptions, "Traditional-Pdf Options"
+  detailing parameters like columns with defaults and types).
 
-##### 3.4 Extensibility and Formatting
+### 2.2 Problem Generation
 
-- **Future UI Readiness**:
-    - Coordination of test building (e.g., plugin invocation, problem collection) is separated from the CLI module,
-      allowing easy replacement with a new UI (e.g., FastAPI) without modifying core logic.
-- **Advanced Formatting**:
-    - `--questions-per-page`, `--num-tests`, `--grid-cols` for layout; `--student-name`, `--date` for headers;
-      `--answer-key` for solutions.
+- **Plugins**:
+    - Addition/Subtraction/Multiplication: Vertical stacked operands with operator and underline for answers; support
+      min/max operands, allow-negative-result for subtraction.
+    - Division: Long division format with quotient and remainder.
+    - Clock: Analog clock with hands; configurable minute intervals, accurate-hour, 24-hour mode.
+- **Generation Logic**: For random mode, use seeded random for operands/hands; interleave types deterministically across
+  tests. For reproduction, parse JSON and delegate to plugins' from_data methods.
+- **Multi-Test Support**: Generate independent sets for each test count, applying the same config.
+- **Configuration Extraction**: Plugins receive the full unified dict and pull defaults + common +
+  problem-plugins[<name>].
 
-#### 4. Architecture
+### 2.3 Output Rendering
 
-##### 4.1 Directory Structure
+- **Plugins**: "traditional-pdf" renders to PDF with configurable margins (default 0.75 inches), columns (default 4),
+  font sizes (title 20, answers 12), problem spacing (0.35 inches), and toggles like include_answers (default False),
+  include_student_header (default True).
+- **Multi-Output**: Invoke all selected; JSON serializes problem type/data (e.g., operands, answer) in a list,
+  compatible with multi-output runs.
+- **Rendering Details**: Scale SVGs to fit columns without distortion; distribute problems evenly with vertical spacing;
+  add title centered, student fields with underlines, and answer key as numbered list if enabled.
+- **Configuration Extraction**: Outputs receive full unified dict, pulling defaults + common + output-plugins[<name>].
 
-```
-root/
-|-- mathtest/
-|   |-- __init__.py
-|   |-- main.py         # CLI module
-|   |-- coordinator.py  # Test building coordination
-|   |-- interface.py    # Plugin and output interfaces
-|   |-- registry.py     # Plugin registry
-|   |-- output/
-|   |   |-- __init__.py
-|   |   |-- pdf.py      # Initial PDF implementation
-|   |-- plugins/
-|   |   |-- __init__.py
-|   |   |-- addition.py
-|   |   |-- subtraction.py
-|   |   |-- multiplication.py
-|   |   |-- division.py
-|   |   |-- clock_reading.py
-|-- tests/
-|   |-- __init__.py
-|   |-- test_plugins.py
-|   |-- test_main.py
-|   |-- test_coordinator.py
-|   |-- test_output.py
-|-- pyproject.toml      # UV configuration and entry points
-|-- README.md
-|-- .gitignore
-```
+### 2.4 Configuration
 
-##### 4.2 Component Breakdown
+- **YAML Structure**: Top-level keys: common, problem-plugins (mapping plugin names to params), output-plugins (
+  similar).
+- **Merging Process**: Start with plugin-provided defaults; apply common; then specific sections; normalize keys (hyphen
+  to snake); validate post-merge.
+- **Unified Dict**: Passed to all plugins for self-extraction, ensuring consistency.
 
-- **Plugins**: In `mathtest/plugins/`, return `Problem` objects, define params via `get_parameters`, loaded via entry
-  points. For arithmetic plugins, SVGs use vertical stacking.
-- **CLI Module (`main.py`)**:
-    - Handles Typer command definition, parses CLI flags, and calls the coordinator.
-    - Keeps UI-specific logic separate from test generation.
-- **Coordinator Module (`coordinator.py`)**:
-    - Contains core logic for loading plugins, merging parameters, generating problems, and assembling PDFs/JSON.
-    - Reusable layer, independent of CLI, for future UI integration.
-- **Registry (`registry.py`)**:
-    - Manages plugin instances, queried by type name.
-- **Interface (`interface.py`)**:
-    - Defines `MathProblemPlugin` with `generate_problem` (returns `Problem` based on params or `data`) and
-      `get_parameters`.
-- **PDF Layout**: Uses `reportlab` to implement `--grid-cols`, `--questions-per-page`, etc.
+### 2.5 Plugins
 
-##### 4.3 Data Flow
+- **Generation Plugins**: Implement protocol with name, parameters (e.g., min-operand: int default 0, description "
+  Minimum operand value"), generate_problem (random SVG/data), generate_from_data (deterministic).
+- **Output Plugins**: Similar protocol; generate renders to file based on params like path.
+- **Entry Points**: mathtest.generation_plugins for generation; mathtest.output_plugins for outputs.
+- **Extensibility**: Plugins define unique params; CLI/help auto-adapts.
 
-1. CLI input sets flags (e.g., `--addition`, `--num-problems`).
-2. Coordinator loads plugins, merges params, generates problems, produces output.
-3. PDF assembled with layout options, recreated from JSON if `--json-input` set.
+## 3. User Stories
 
-##### 4.4 Technology Stack
+- As an educator, I can enable addition and clock plugins, set problems-per-test to 20 and test-count to 3, choose
+  traditional-pdf with custom columns, and add JSON output to generate and save multiple worksheets.
+- As a parent, I can load a JSON input to reproduce exact worksheets across tests, applying the same output plugins.
+- As a developer, I can create a new generation plugin with custom params and an output plugin for CSV, integrating via
+  entry points with dynamic CLI support.
 
-- **Language**: Python
-- **Dependency Management**: UV with `pyproject.toml` (e.g., `typer`, `pyyaml`, `svgwrite`, `reportlab`, `pydantic`)
-- **CLI**: Typer
-- **Rendering**: SVG (`svgwrite`)
-- **PDF**: `reportlab`
-- **Validation**: Pydantic (for models, schemas, and params)
-- **Testing**: pytest
+## 4. Assumptions and Constraints
 
-#### 5. Non-Functional Requirements
+- Integer operands only; JSON output always multi-compatible even if other outputs are selected.
+- Single language (English); no advanced rendering like interactivity.
+- CLI-only; assume users have basic command-line familiarity.
 
-- **Performance**: 100 problems in <5 seconds.
-- **Scalability**: Support 10+ plugins.
-- **Reliability**: Handle invalid inputs with clear errors; 99% pytest pass rate.
-- **Maintainability**: PEP 8, >80% test coverage.
-- **Extensibility**: Output interface and coordinator reusable for new UIs.
+## 5. Success Metrics
 
-#### 6. Future Considerations
-
-- **Advanced Features**: Graphing, multi-language support.
-- **Deployment**: PyPI package with UV.
-
-#### 7. Risks and Mitigations
-
-- **Risk**: Entry point misconfiguration.
-    - **Mitigation**: Log warnings, validate at startup.
-- **Risk**: JSON `data` inconsistencies.
-    - **Mitigation**: Use Pydantic schemas for validation.
-- **Risk**: PDF layout issues.
-    - **Mitigation**: Test with large grids, multi-page tests.
-
-#### 8. Next Steps
-
-- **Implementation**: Develop `mathtest/` modules based on the SDD, using the POC as a reference.
-- **Review**: Conduct a design review to validate the architecture.
-- **Testing**: Create pytest suites for each module.
-- **Documentation**: Update `README.md` with setup and usage instructions.
-
+- Worksheets visually and functionally match configurations with high fidelity.
+- Error-free reproduction from JSON across multiple tests.
+- Test coverage >85%; positive usability in CLI interactions.

@@ -1,93 +1,56 @@
-### Implementation Plan for MVP with Addition and Subtraction Problems
+# MVP Implementation Plan for MathTest
 
-This plan focuses on a Minimal Viable Product (MVP) implementing only addition and subtraction problems, as specified.
-The MVP will validate the core architecture (plugin loading, coordination, CLI, JSON I/O, PDF output) with a reduced
-scope, ensuring quick iteration and early feedback. It follows the SDD's units of work but prioritizes essentials,
-aiming for a functional CLI that generates simple tests. Estimated timeline: 1-2 weeks for a solo developer using Codex,
-assuming 20-30 hours/week.
+## Phase 1: Setup and Interfaces
 
-#### MVP Scope
+- Set up pyproject.toml with production dependencies (pydantic, typer, pyyaml, reportlab, svglib, svgwrite) and dev
+  tools (pytest, mypy, black, ruff, pydocstyle).
+- Configure structured logging using logging module at module levels.
+- Define protocols for MathProblemPlugin and OutputGenerator, along with supporting Pydantic models like
+  ParameterDefinition and Problem.
 
-- **Included**: Addition and subtraction plugins; basic CLI flags (e.g., `--addition`, `--subtraction`,
-  `--total-problems`, `--output`); optional YAML; JSON input/output; PDF assembly with answer keys (no advanced layout
-  like `--grid-cols` initially).
-- **Excluded**: Multiplication, division, clock-reading; advanced formatting (`--questions-per-page`, `--num-tests`,
-  etc.); full error handling; comprehensive tests (focus on smoke tests).
-- **Success Criteria**: Run `mathtest generate --addition --total-problems 5 --output test.pdf` to produce a PDF with 5
-  addition problems and answers; reproduce via JSON.
-- **Assumptions**: Use Python 3.14, UV for dependencies, Codex for code generation/review, pytest for basics.
+## Phase 2: Registries and Utilities
 
-#### Phase 1: Setup and Foundations (1-2 days)
+- Implement separate registry classes for generation (loading from mathtest.generation_plugins) and outputs (from
+  mathtest.output_plugins), including caching, validation against protocols, and logging.
+- Develop config merging utility to produce unified dict from defaults, YAML, and CLI, with key normalization and
+  precedence handling.
+- Create svg_utils module for shared SVG rendering functions (e.g., vertical arithmetic layout with consistent
+  dimensions, fonts, and paddings).
 
-- **Tasks**:
-    - Create repo structure: `mathtest/`, `tests/`, `pyproject.toml`.
-    - Configure `pyproject.toml`: Add dependencies (`typer`, `pyyaml`, `svgwrite`, `reportlab`, `pydantic`), entry
-      points for addition/subtraction (e.g., `addition = mathtest.plugins.addition:AdditionPlugin`).
-    - Implement `interface.py`: Define Protocols and Pydantic models as per latest artifact.
-    - Use Codex to generate/review stubs.
-- **Milestone**: Empty project runs with `uv sync` and `pytest` (no tests yet).
-- **Risks**: Dependency conflicts—mitigate by pinning versions in `pyproject.toml`.
+## Phase 3: Generation Plugins
 
-#### Phase 2: Plugin Implementation (2-3 days)
+- Implement addition, subtraction, multiplication, division, and clock plugins: Define Pydantic config models with
+  aliases/validators, extract from unified dict, generate random/deterministic problems with SVG and immutable data.
+- Add logging for init, extraction, and generation; handle edges like zero quantity or invalid data.
+- Write unit tests in tests/unit/plugins (e.g., seeded determinism, SVG structure assertions, validation errors).
 
-- **Tasks**:
-    - Create `plugins/addition.py` and `plugins/subtraction.py`: Implement Protocol methods (classmethods for
-      `get_parameters` and `generate_from_data`, instance `generate_problem`).
-    - Support random generation (e.g., add operands within defaults like max-operand=10) and deterministic from `data`.
-    - Use `svgwrite` for SVG with vertical stacking for arithmetic problems (top operand above bottom, operator left,
-      line under).
-    - Validate params/`data` with Pydantic inside methods.
-    - Document init policy (optional params dict).
-- **Milestone**: Manually test plugins (e.g., `plugin = AdditionPlugin(params); problem = plugin.generate_problem()`
-  yields valid `Problem` with stacked SVG).
-- **Risks**: SVG rendering issues—start with text-only for MVP.
+## Phase 4: Coordinator
 
-#### Phase 3: Registry and Coordinator (3-4 days)
+- Build models like GenerationRequest (incorporating problems-per-test, test-count).
+- Implement central merging to unified dict, plugin selection/instantiation, multi-test generation with interleaving (
+  hashlib for shuffle seeds), and JSON reproduction.
+- Add logging for each phase; specific error handling with user messages.
+- Develop integration tests in tests/integration (e.g., full generation flows with mocked plugins).
 
-- **Tasks**:
-    - Implement `registry.py`: Dictionary for plugin lookup, populated via entry points.
-    - Implement `coordinator.py`: Functions for loading plugins, merging params (defaults + YAML + CLI, override with
-      JSON), generating problems (loop over types or JSON data), saving JSON, delegating to output.
-    - Handle JSON input override: If provided, use `generate_from_data` classmethod per entry, ignoring type flags.
-    - Use Pydantic for param merging/validation.
-- **Milestone**: Coordinator can generate a list of `Problem` objects from mock inputs, including JSON reproduction.
-- **Risks**: Param merging complexity—test edge cases (no YAML, JSON override) early.
+## Phase 5: Output Plugin
 
-#### Phase 4: Output Implementation (1-2 days)
+- Implement "traditional-pdf": Pydantic config with parameters (e.g., margin_inches gt 0), extract from unified, use
+  Platypus for title/header/problems/answers, handle scaling/tolerance/multi-test paging.
+- Special-case JSON as output plugin: Serialize problems per test, ensure multi-compatibility without conflicts.
+- Include logging for rendering; tests in tests/unit/output (layout assertions with mocks) and tests/integration (file
+  outputs).
 
-- **Tasks**:
-    - Implement `output/pdf.py`: Basic PDF generation with `reportlab`, embedding SVGs and adding answer keys from
-      `Problem.data['answer']`.
-    - Keep layout simple (e.g., vertical list, no grid for MVP).
-    - Validate inputs with Pydantic.
-- **Milestone**: Coordinator can delegate to PDF output, producing a file with stacked problems.
-- **Risks**: Library quirks—use simple canvas for MVP.
+## Phase 6: CLI Integration
 
-#### Phase 5: CLI Integration and Basic Testing (2-3 days)
+- Use custom TyperCommand for dynamic flag generation: Separate generation enables, repeatable --output-plugin,
+  overrides from get_parameters.
+- Parse YAML/JSON safely, build unified config, invoke coordinator, handle multi-outputs.
+- Validate inputs (e.g., positive counts); echo success with details.
+- Tests in tests/integration/cli (end-to-end with CliRunner, covering flag combos, help output, errors).
 
-- **Tasks**:
-    - Implement `main.py`: Typer command with dynamic flags from `get_parameters` (classmethod), call coordinator.
-    - Support optional `--config`, `--json-input`/`--output`, basic flags.
-    - Add smoke tests in `tests/` (e.g., `test_plugins.py` for generation, `test_coordinator.py` for merging/JSON).
-    - Use `pytest` with coverage.
-- **Milestone**: Full MVP run: CLI generates PDF/JSON for addition/subtraction, reproduces from JSON.
-- **Risks**: Dynamic flags in Typer—test help menu and parsing.
+## Phase 7: Testing and Documentation
 
-#### Phase 6: Review, Polish, and Deployment (1 day)
-
-- **Tasks**:
-    - Review against PRD/SDD: Ensure no smells (e.g., run mypy, black for formatting).
-    - Update `README.md`: Installation, usage examples.
-    - Commit to Git, tag MVP v0.1.
-- **Milestone**: MVP deployable via PyPI or local install.
-- **Risks**: Scope creep—stick to addition/subtraction only.
-
-#### Overall Timeline and Resources
-
-- **Total**: 9-15 days, assuming iterative Codex use for generation/review.
-- **Dependencies**: UV, Codex for code, Git for versioning.
-- **Monitoring**: Track progress via Git issues or a simple Kanban (e.g., To Do, In Progress, Done).
-- **Post-MVP**: Add remaining plugins, advanced features based on feedback.
-
-This plan ensures a focused MVP, validating the architecture early. Let me know if you'd like to adjust timelines or add
-tools!
+- Ensure >85% coverage via pytest --cov; organize into unit (isolated, fast) and integration (holistic, file-based)
+  packages.
+- Add Google-style docstrings comprehensively, covering args/returns/raises/examples.
+- Create README with detailed CLI usage examples, plugin extension instructions, and configuration YAML samples.
