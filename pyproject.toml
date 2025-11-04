@@ -27,6 +27,9 @@ multiplication = "mathtest.plugins.multiplication:MultiplicationPlugin"
 clock = "mathtest.plugins.clock:ClockPlugin"
 division = "mathtest.plugins.division:DivisionPlugin"
 
+[project.entry-points."mathtest.output_plugins"]
+traditional-pdf = "mathtest.output.pdf:PdfOutputGenerator"
+
 [build-system]
 requires = ["uv_build>=0.8.6,<0.9.0"]
 build-backend = "uv_build"

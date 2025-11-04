@@ -1,26 +1,32 @@
 """End-to-end tests for the Typer CLI introduced in MVP Phase 5."""
 
-from __future__ import annotations
-
 import json
 from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from click.testing import Result
 from typer.testing import CliRunner
 import yaml
+import pytest
 
+import importlib
+
+main_module = importlib.import_module("mathtest.main")
 from mathtest.coordinator import (
     Coordinator,
     GenerationRequest,
     ParameterSet,
     PluginRequest,
 )
+from mathtest.interface import ParameterDefinition, Problem
+from mathtest.output.pdf import PdfOutputGenerator
 from mathtest.main import (
     _PLUGIN_PARAMETERS,
     _collect_global_parameter_defaults,
     _normalize_argv,
     app,
 )
+from mathtest.registry import OutputPluginRegistry
 
 
 def _invoke(runner: CliRunner, args: list[str]) -> Result:
@@ -53,8 +59,12 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
             "3",
             "--subtraction-max-operand",
             "3",
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(pdf_path),
+            "--traditional-pdf-include-answers",
+            "true",
             "--json-output",
             str(json_path),
         ],
@@ -73,7 +83,9 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
         [
             "--json-input",
             str(json_path),
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(replay_pdf),
         ],
     )
@@ -95,7 +107,9 @@ def test_cli_generates_pdf_and_json(tmp_path: Path) -> None:
             "4",
             "--total-problems",
             "3",
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(override_pdf),
             "--json-output",
             str(override_json),
@@ -117,7 +131,9 @@ def test_cli_requires_plugin_without_json(tmp_path: Path) -> None:
     result = _invoke(
         runner,
         [
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(tmp_path / "unused.pdf"),
         ],
     )
@@ -192,7 +208,9 @@ def test_cli_inserts_generate_prefix_for_flags(tmp_path: Path) -> None:
             "42",
             "--total-problems",
             "1",
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(pdf_path),
         ],
     )
@@ -218,7 +236,9 @@ def test_cli_answer_key_flag_controls_pdf_section(tmp_path: Path) -> None:
         runner,
         [
             *base_args,
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(without_path),
         ],
     )
@@ -232,15 +252,195 @@ def test_cli_answer_key_flag_controls_pdf_section(tmp_path: Path) -> None:
         runner,
         [
             *base_args,
-            "--answer-key",
-            "--output",
+            "--output-plugin",
+            "traditional-pdf",
+            "--traditional-pdf-path",
             str(with_path),
+            "--traditional-pdf-include-answers",
+            "true",
         ],
     )
 
     assert with_result.exit_code == 0, with_result.output
     assert with_path.exists()
     assert b"Answer Key" in with_path.read_bytes()
+
+
+def test_cli_rejects_multiple_standard_output_plugins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Standard output plugins should be mutually exclusive."""
+
+    pdf_path = tmp_path / "combo.pdf"
+    recording_path = tmp_path / "recording.txt"
+
+    class _RecordingOutput:
+        """Simple output plugin that logs answers to a text file."""
+
+        def __init__(self, config: Mapping[str, Any] | None = None) -> None:
+            mapping = dict(config or {})
+            raw_path = mapping.get("path", recording_path)
+            self._path = Path(str(raw_path))
+
+        @property
+        def name(self) -> str:
+            return "recording"
+
+        @classmethod
+        def get_parameters(cls) -> tuple[ParameterDefinition, ...]:
+            return (
+                ParameterDefinition(
+                    name="path",
+                    default=recording_path,
+                    description="Destination for recorded answers.",
+                    type="path",
+                ),
+            )
+
+        def generate(self, problems: Sequence[Problem]) -> None:
+            answers = [str(problem.data["answer"]) for problem in problems]
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text("\n".join(answers), encoding="utf-8")
+
+    registry = OutputPluginRegistry(
+        plugins={
+            "traditional-pdf": PdfOutputGenerator,
+            "recording": _RecordingOutput,
+        }
+    )
+    monkeypatch.setattr(main_module, "_OUTPUT_REGISTRY", registry)
+    monkeypatch.setattr(
+        main_module,
+        "_OUTPUT_PLUGIN_PARAMETERS",
+        {
+            "traditional-pdf": list(PdfOutputGenerator.get_parameters()),
+            "recording": list(_RecordingOutput.get_parameters()),
+        },
+    )
+    monkeypatch.setattr(main_module, "_DEFAULT_OUTPUT_PLUGINS", ("traditional-pdf",))
+
+    runner = CliRunner()
+    result = _invoke(
+        runner,
+        [
+            "--addition",
+            "--addition-random-seed",
+            "11",
+            "--total-problems",
+            "2",
+            "--output-plugin",
+            "traditional-pdf",
+            "--output-plugin",
+            "recording",
+            "--traditional-pdf-path",
+            str(pdf_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Only one standard output plugin" in result.output
+    assert not recording_path.exists()
+
+
+def test_cli_rejects_unknown_output_plugin(tmp_path: Path) -> None:
+    """Invalid output plugin names should produce a helpful error."""
+
+    runner = CliRunner()
+    result = _invoke(
+        runner,
+        [
+            "--addition",
+            "--output-plugin",
+            "traditional-pdf",
+            "--output-plugin",
+            "missing-output",
+            "--traditional-pdf-path",
+            str(tmp_path / "missing.pdf"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Unknown output plugin" in result.output
+
+
+def test_cli_allows_standard_and_json_output_plugins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A single standard output may be combined with a JSON-oriented plugin."""
+
+    pdf_path = tmp_path / "combo.pdf"
+    json_path = tmp_path / "combo.json"
+
+    class _JsonOutput:
+        """Output plugin that serializes problems to JSON."""
+
+        def __init__(self, config: Mapping[str, Any] | None = None) -> None:
+            mapping = dict(config or {})
+            raw_path = mapping.get("path", json_path)
+            self._path = Path(str(raw_path))
+
+        @property
+        def name(self) -> str:
+            return "json"
+
+        @classmethod
+        def get_parameters(cls) -> tuple[ParameterDefinition, ...]:
+            return (
+                ParameterDefinition(
+                    name="path",
+                    default=json_path,
+                    description="Destination JSON file for serialized problems.",
+                    type="path",
+                ),
+            )
+
+        def generate(self, problems: Sequence[Problem]) -> None:
+            payload = [problem.model_dump() for problem in problems]
+            self._path.parent.mkdir(parents=True, exist_ok=True)
+            self._path.write_text(json.dumps(payload), encoding="utf-8")
+
+    registry = OutputPluginRegistry(
+        plugins={
+            "traditional-pdf": PdfOutputGenerator,
+            "json": _JsonOutput,
+        }
+    )
+    monkeypatch.setattr(main_module, "_OUTPUT_REGISTRY", registry)
+    monkeypatch.setattr(
+        main_module,
+        "_OUTPUT_PLUGIN_PARAMETERS",
+        {
+            "traditional-pdf": list(PdfOutputGenerator.get_parameters()),
+            "json": list(_JsonOutput.get_parameters()),
+        },
+    )
+    monkeypatch.setattr(main_module, "_DEFAULT_OUTPUT_PLUGINS", ("traditional-pdf",))
+
+    runner = CliRunner()
+    result = _invoke(
+        runner,
+        [
+            "--addition",
+            "--addition-random-seed",
+            "5",
+            "--total-problems",
+            "2",
+            "--output-plugin",
+            "traditional-pdf",
+            "--output-plugin",
+            "json",
+            "--traditional-pdf-path",
+            str(pdf_path),
+            "--json-path",
+            str(json_path),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert pdf_path.exists()
+    assert json_path.exists()
+    serialized = json.loads(json_path.read_text(encoding="utf-8"))
+    assert len(serialized) == 2
 
 
 def test_cli_generates_clock_problems(tmp_path: Path) -> None:

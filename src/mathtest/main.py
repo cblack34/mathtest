@@ -1,14 +1,12 @@
 """Command-line interface implementing MVP Phase 5 for Mathtest."""
 
-from __future__ import annotations
-
 import inspect
 import json
 import random
 import re
 import sys
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Sequence, cast
 
 import click
 import typer
@@ -25,13 +23,17 @@ from .coordinator import (
     SerializedProblem,
 )
 from .interface import ParameterDefinition
-from .output import PdfOutputGenerator
-from .registry import PluginRegistry
+from .registry import (
+    OutputPluginRegistry,
+    OutputPluginRegistryError,
+    PluginRegistry,
+)
 
 
 app = typer.Typer(help="Generate printable math worksheets from the terminal.")
 
 _REGISTRY = PluginRegistry()
+_OUTPUT_REGISTRY = OutputPluginRegistry()
 
 
 def _collect_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
@@ -54,6 +56,45 @@ def _collect_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
 
 
 _PLUGIN_PARAMETERS = _collect_plugin_parameters()
+
+
+def _collect_output_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
+    """Gather parameter metadata from each registered output plugin."""
+
+    parameters: dict[str, list[ParameterDefinition]] = {}
+    for name in _OUTPUT_REGISTRY.names():
+        plugin_cls = _OUTPUT_REGISTRY.get_class(name)
+        try:
+            definitions = list(plugin_cls.get_parameters())
+        except Exception as exc:  # pragma: no cover - plugin misbehavior
+            msg = f"Unable to load output parameter definitions for '{name}'"
+            raise RuntimeError(msg) from exc
+        parameters[name] = definitions
+    return parameters
+
+
+_OUTPUT_PLUGIN_PARAMETERS = _collect_output_plugin_parameters()
+
+
+def _default_output_plugins() -> tuple[str, ...]:
+    """Select the default output plugin selection exposed via the CLI."""
+
+    names = _OUTPUT_REGISTRY.names()
+    preferred = "traditional-pdf"
+    if preferred in names:
+        return (preferred,)
+    if names:
+        return (names[0],)
+    return ()
+
+
+_DEFAULT_OUTPUT_PLUGINS = _default_output_plugins()
+
+
+def _is_json_output(name: str) -> bool:
+    """Return ``True`` when ``name`` refers to a JSON-compatible plugin."""
+
+    return "json" in name.lower()
 
 
 def _collect_global_parameter_defaults() -> dict[str, Any]:
@@ -109,6 +150,10 @@ _CLICK_TYPE_ALIASES: dict[str, click.ParamType | type[Any]] = {
     "float": float,
     "bool": click.BOOL,
     "str": str,
+    "path": cast(
+        click.ParamType,
+        click.Path(path_type=Path, dir_okay=False, file_okay=True, writable=True),
+    ),
 }
 
 _CLICK_TYPE_TYPES: dict[type[Any], click.ParamType | type[Any]] = {
@@ -131,6 +176,12 @@ def _option_storage_key(plugin_name: str, parameter_name: str) -> str:
     """
 
     return f"{plugin_name}_{parameter_name.replace('-', '_')}"
+
+
+def _output_option_storage_key(output_name: str, parameter_name: str) -> str:
+    """Return the storage key Typer assigns to an output override option."""
+
+    return f"output_{output_name.replace('-', '_')}_{parameter_name.replace('-', '_')}"
 
 
 def _load_parameter_set(config_path: Path | None) -> ParameterSet:
@@ -220,6 +271,22 @@ def _build_cli_parameter_set(params: dict[str, Any]) -> ParameterSet:
     return ParameterSet(common={}, plugins=plugin_overrides)
 
 
+def _build_output_cli_overrides(params: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Extract CLI override mappings for output plugins."""
+
+    overrides: dict[str, dict[str, Any]] = {}
+    for output_name, definitions in _OUTPUT_PLUGIN_PARAMETERS.items():
+        config_overrides: dict[str, Any] = {}
+        for definition in definitions:
+            key = _output_option_storage_key(output_name, definition.name)
+            value = params.get(key)
+            if value is not None:
+                config_overrides[definition.name] = value
+        if config_overrides:
+            overrides[output_name] = config_overrides
+    return overrides
+
+
 def _build_plugin_requests(
     params: dict[str, Any], total_problems: int, rng: random.Random | None = None
 ) -> list[PluginRequest]:
@@ -285,7 +352,6 @@ def write_config(
         help=(
             "File path for the generated YAML template. Defaults to printing the template to stdout."
         ),
-        path_type=Path,
         file_okay=True,
         dir_okay=False,
         writable=True,
@@ -322,45 +388,30 @@ def _static_generate_options() -> list[click.Option]:
     return [
         click.Option(
             ["--config", "-c"],
-            type=click.Path(
-                path_type=Path, exists=True, dir_okay=False, file_okay=True
+            type=cast(
+                click.ParamType,
+                click.Path(path_type=Path, exists=True, dir_okay=False, file_okay=True),
             ),
             default=None,
             help="Path to a YAML configuration file providing default parameters.",
         ),
         click.Option(
             ["--json-input"],
-            type=click.Path(
-                path_type=Path, exists=True, dir_okay=False, file_okay=True
+            type=cast(
+                click.ParamType,
+                click.Path(path_type=Path, exists=True, dir_okay=False, file_okay=True),
             ),
             default=None,
             help="Optional JSON file containing serialized problems to reproduce.",
         ),
         click.Option(
             ["--json-output"],
-            type=click.Path(path_type=Path, dir_okay=False, file_okay=True),
+            type=cast(
+                click.ParamType,
+                click.Path(path_type=Path, dir_okay=False, file_okay=True),
+            ),
             default=None,
             help="Destination for JSON serialization of generated problems.",
-        ),
-        click.Option(
-            ["--output", "-o"],
-            type=click.Path(path_type=Path, dir_okay=False, file_okay=True),
-            default=Path("worksheet.pdf"),
-            show_default=True,
-            help="Destination PDF file path.",
-        ),
-        click.Option(
-            ["--title"],
-            type=str,
-            default="Test",
-            show_default=True,
-            help="Title displayed at the top of the worksheet.",
-        ),
-        click.Option(
-            ["--answer-key/--no-answer-key"],
-            default=False,
-            show_default=True,
-            help="Include the answer key section in the generated PDF.",
         ),
         click.Option(
             ["--total-problems", "--total-problems-per-test"],
@@ -368,6 +419,17 @@ def _static_generate_options() -> list[click.Option]:
             default=10,
             show_default=True,
             help="Total number of problems generated across selected plugins.",
+        ),
+        click.Option(
+            ["--output-plugin"],
+            type=str,
+            multiple=True,
+            default=_DEFAULT_OUTPUT_PLUGINS,
+            show_default=bool(_DEFAULT_OUTPUT_PLUGINS),
+            help=(
+                "Output plugin used to render the worksheet. JSON-oriented "
+                "plugins may be combined with one standard plugin."
+            ),
         ),
     ]
 
@@ -407,6 +469,28 @@ def _plugin_generate_options() -> list[click.Option]:
     return options
 
 
+def _output_generate_options() -> list[click.Option]:
+    """Return output plugin override options for the generate command."""
+
+    options: list[click.Option] = []
+    for output_name, definitions in _OUTPUT_PLUGIN_PARAMETERS.items():
+        for definition in definitions:
+            option = TyperOption(
+                param_decls=[f"--{output_name}-{definition.name}"],
+                type=_click_type_for(definition),
+                default=None,
+                metavar="VALUE",
+                help=(
+                    f"Override for output '{output_name}' parameter '{definition.name}': "
+                    f"{definition.description}"
+                ),
+                rich_help_panel="Output Plugins",
+            )
+            option.name = _output_option_storage_key(output_name, definition.name)
+            options.append(option)
+    return options
+
+
 def _click_type_for(definition: ParameterDefinition) -> click.ParamType | type[Any]:
     """Resolve the Click type for ``definition`` based on its declared type."""
 
@@ -430,6 +514,7 @@ class _GenerateCommand(TyperCommand):
         ]
         params.extend(_static_generate_options())
         params.extend(_plugin_generate_options())
+        params.extend(_output_generate_options())
         kwargs.setdefault("rich_markup_mode", None)
         super().__init__(*args, params=params, **kwargs)
 
@@ -442,7 +527,9 @@ class _GenerateCommand(TyperCommand):
         super().format_help(ctx, captured)
         formatter.write(self._strip_kwargs_arguments(captured.getvalue()))
 
-    def get_help(self, ctx: click.Context) -> str:  # pragma: no cover - exercised via CLI tests
+    def get_help(
+        self, ctx: click.Context
+    ) -> str:  # pragma: no cover - exercised via CLI tests
         return self._strip_kwargs_arguments(super().get_help(ctx))
 
     @staticmethod
@@ -455,7 +542,11 @@ class _GenerateCommand(TyperCommand):
         skipping_rich = False
         for line in lines:
             stripped = line.strip()
-            if not skipping_rich and "Arguments" in stripped and stripped.startswith("╭"):
+            if (
+                not skipping_rich
+                and "Arguments" in stripped
+                and stripped.startswith("╭")
+            ):
                 skipping_rich = True
                 continue
             if skipping_rich:
@@ -473,6 +564,7 @@ class _GenerateCommand(TyperCommand):
 
         return cleaned_text
 
+
 def _plugin_description(plugin_name: str) -> str:
     plugin_cls = _REGISTRY.get_class(plugin_name)
     doc = inspect.cleandoc(plugin_cls.__doc__ or "")
@@ -485,43 +577,80 @@ def generate(
     config: Path | None,
     json_input: Path | None,
     json_output: Path | None,
-    output: Path,
-    title: str,
-    answer_key: bool,
+    output_plugin: tuple[str, ...],
     total_problems: int,
-    **plugin_options: Any,
+    **option_values: Any,
 ) -> None:
-    """Generate a math worksheet PDF using registered plugins.
+    """Generate math worksheets using registered problem and output plugins.
 
     Args:
         config: Optional YAML configuration file path.
         json_input: Optional JSON file containing serialized problems.
         json_output: Optional path for writing the JSON serialization output.
-        output: Destination PDF path for the generated worksheet.
-        title: Worksheet title rendered at the top of the PDF.
-        answer_key: Whether to include the answer key section in the PDF.
+        output_plugin: Selected output plugin identifiers.
         total_problems: Number of problems distributed across selected plugins.
-        **plugin_options: Plugin-specific flags and parameter overrides.
+        **option_values: Plugin-specific flags and parameter overrides.
 
     Raises:
         typer.BadParameter: If the supplied CLI arguments cannot be processed.
     """
 
     yaml_parameters = _load_parameter_set(config)
-    cli_parameters = _build_cli_parameter_set(plugin_options)
-    plugin_requests = _build_plugin_requests(plugin_options, total_problems)
+    cli_parameters = _build_cli_parameter_set(option_values)
+    output_overrides = _build_output_cli_overrides(option_values)
+    plugin_requests = _build_plugin_requests(option_values, total_problems)
     json_entries = _load_json_input(json_input) if json_input else None
 
     selected_plugins = [
         plugin_name
         for plugin_name in _PLUGIN_PARAMETERS
-        if plugin_options.get(plugin_name, False)
+        if option_values.get(plugin_name, False)
     ]
 
     if json_entries is None and not selected_plugins:
         raise typer.BadParameter(
             "Select at least one plugin flag or provide --json-input.",
             param_hint="--addition/--subtraction or --json-input",
+        )
+
+    selected_outputs = tuple(output_plugin)
+
+    available_outputs = set(_OUTPUT_REGISTRY.names())
+    unknown_outputs = [
+        name for name in selected_outputs if name not in available_outputs
+    ]
+    if unknown_outputs:
+        unique = ", ".join(sorted(dict.fromkeys(unknown_outputs)))
+        raise typer.BadParameter(
+            f"Unknown output plugin(s): {unique}",
+            param_hint="--output-plugin",
+        )
+
+    if len(selected_outputs) != len(dict.fromkeys(selected_outputs)):
+        raise typer.BadParameter(
+            "Duplicate --output-plugin selections are not allowed.",
+            param_hint="--output-plugin",
+        )
+
+    standard_outputs = [name for name in selected_outputs if not _is_json_output(name)]
+    json_outputs = [name for name in selected_outputs if _is_json_output(name)]
+
+    if len(standard_outputs) > 1:
+        raise typer.BadParameter(
+            "Only one standard output plugin may be selected at a time.",
+            param_hint="--output-plugin",
+        )
+
+    if len(json_outputs) > 1:
+        raise typer.BadParameter(
+            "Only one JSON output plugin may be selected at a time.",
+            param_hint="--output-plugin",
+        )
+
+    if not selected_outputs and json_output is None:
+        raise typer.BadParameter(
+            "Select at least one --output-plugin or provide --json-output.",
+            param_hint="--output-plugin/--json-output",
         )
 
     request = GenerationRequest(
@@ -534,17 +663,32 @@ def generate(
     coordinator = Coordinator(registry=_REGISTRY)
     result = coordinator.generate(request)
 
-    pdf_params = {
-        "path": output,
-        "title": title,
-        "include_answers": answer_key,
-    }
-    PdfOutputGenerator().generate(result.problems, pdf_params)
+    output_plugins = []
+    for output_name in selected_outputs:
+        defaults = {
+            definition.name: definition.default
+            for definition in _OUTPUT_PLUGIN_PARAMETERS.get(output_name, [])
+        }
+        overrides = output_overrides.get(output_name, {})
+        plugin_config = {**defaults, **overrides}
+        try:
+            instance = _OUTPUT_REGISTRY.create(output_name, plugin_config)
+        except OutputPluginRegistryError as exc:
+            raise typer.BadParameter(
+                str(exc), param_hint=f"--output-plugin {output_name}"
+            ) from exc
+        output_plugins.append(instance)
+
+    for plugin in output_plugins:
+        plugin.generate(result.problems)
 
     if json_output is not None:
         _write_json_output(json_output, result.json_ready())
 
-    typer.echo(f"Generated worksheet with {len(result.problems)} problems -> {output}")
+    output_summary = ", ".join(plugin.name for plugin in output_plugins) or "JSON only"
+    typer.echo(
+        f"Generated worksheet with {len(result.problems)} problems using outputs: {output_summary}"
+    )
 
 
 def _generate_entrypoint(**kwargs) -> None:

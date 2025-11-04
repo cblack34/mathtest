@@ -4,8 +4,6 @@ The MVP relies on these interfaces to keep plugins, the coordinator, and
 output generators loosely coupled as described in the PRD/SDD documents.
 """
 
-from __future__ import annotations
-
 from typing import Any, Mapping, Protocol, Sequence, Type, runtime_checkable
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, model_validator
@@ -103,5 +101,16 @@ class MathProblemPlugin(Protocol):
 class OutputGenerator(Protocol):
     """Interface for output backends such as PDF writers (SDD §3.2.5)."""
 
-    def generate(self, problems: Sequence[Problem], params: Mapping[str, Any]) -> None:
-        """Produce an artifact from the supplied problems and layout parameters."""
+    def __init__(self, config: Mapping[str, Any] | None = None) -> None:
+        """Initialize the output plugin with optional configuration."""
+
+    @property
+    def name(self) -> str:
+        """Return the unique identifier advertised via entry points."""
+
+    @classmethod
+    def get_parameters(cls) -> Sequence[ParameterDefinition]:
+        """Return parameter metadata exposed to configuration surfaces."""
+
+    def generate(self, problems: Sequence[Problem]) -> None:
+        """Produce an artifact from the supplied problems."""

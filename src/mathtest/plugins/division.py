@@ -189,12 +189,8 @@ class _DivisionData(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    dividend: int = Field(
-        ..., description="The number being divided."
-    )
-    divisor: int = Field(
-        ..., description="The number by which we divide."
-    )
+    dividend: int = Field(..., description="The number being divided.")
+    divisor: int = Field(..., description="The number by which we divide.")
     operator: str = Field(
         default="÷",
         description="Operator token saved in JSON output (always '÷').",

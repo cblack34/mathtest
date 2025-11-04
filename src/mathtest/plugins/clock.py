@@ -32,7 +32,9 @@ def _format_answer(hour: int, minute: int, is_24_hour: bool) -> str:
     return f"{hour}:{minute:02d}"
 
 
-def _hour_hand_angle(hour: int, minute: int, *, is_24_hour: bool, accurate: bool) -> float:
+def _hour_hand_angle(
+    hour: int, minute: int, *, is_24_hour: bool, accurate: bool
+) -> float:
     """Compute the hour hand angle measured clockwise from 12 o'clock."""
 
     if is_24_hour:
@@ -146,7 +148,9 @@ class _ClockData(BaseModel):
 
         if self.minute_hand_angle is None:
             self.minute_hand_angle = expected_minute_angle
-        elif not math.isclose(self.minute_hand_angle, expected_minute_angle, abs_tol=1e-6):
+        elif not math.isclose(
+            self.minute_hand_angle, expected_minute_angle, abs_tol=1e-6
+        ):
             msg = "minute_hand_angle does not match computed value"
             raise ValueError(msg)
 
@@ -239,12 +243,12 @@ def _render_clock_face(data: _ClockData) -> str:
             )
         )
 
-    hour_end = _polar_point(
-        data.hour_hand_angle, hour_hand_length, center_x, center_y
-    )
-    minute_end = _polar_point(
-        data.minute_hand_angle, minute_hand_length, center_x, center_y
-    )
+    hour_angle = data.hour_hand_angle
+    minute_angle = data.minute_hand_angle
+    assert hour_angle is not None and minute_angle is not None
+
+    hour_end = _polar_point(hour_angle, hour_hand_length, center_x, center_y)
+    minute_end = _polar_point(minute_angle, minute_hand_length, center_x, center_y)
 
     drawing.add(
         drawing.line(
