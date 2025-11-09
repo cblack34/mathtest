@@ -22,13 +22,8 @@ from .coordinator import (
     PluginRequest,
     SerializedProblem,
 )
-from .interface import ParameterDefinition
-from .registry import (
-    OutputPluginRegistry,
-    OutputPluginRegistryError,
-    PluginRegistry,
-)
-
+from .interface import OutputGenerator, ParameterDefinition
+from .registry import OutputPluginRegistry, OutputPluginRegistryError, PluginRegistry
 
 app = typer.Typer(help="Generate printable math worksheets from the terminal.")
 
@@ -76,6 +71,26 @@ def _collect_output_plugin_parameters() -> dict[str, list[ParameterDefinition]]:
 _OUTPUT_PLUGIN_PARAMETERS = _collect_output_plugin_parameters()
 
 
+def _collect_output_plugin_categories() -> dict[str, OutputGenerator.Category]:
+    """Return the declared category for each registered output plugin."""
+
+    categories: dict[str, OutputGenerator.Category] = {}
+    for name in _OUTPUT_REGISTRY.names():
+        plugin_cls = _OUTPUT_REGISTRY.get_class(name)
+        try:
+            category = plugin_cls.category()
+        except Exception as exc:  # pragma: no cover - plugin misbehavior
+            msg = f"Unable to load output category for '{name}'"
+            raise RuntimeError(msg) from exc
+        categories[name] = category
+    return categories
+
+
+_OUTPUT_PLUGIN_CATEGORIES: dict[str, OutputGenerator.Category] = (
+    _collect_output_plugin_categories()
+)
+
+
 def _default_output_plugins() -> tuple[str, ...]:
     """Select the default output plugin selection exposed via the CLI."""
 
@@ -94,7 +109,16 @@ _DEFAULT_OUTPUT_PLUGINS = _default_output_plugins()
 def _is_json_output(name: str) -> bool:
     """Return ``True`` when ``name`` refers to a JSON-compatible plugin."""
 
-    return "json" in name.lower()
+    category = _OUTPUT_PLUGIN_CATEGORIES.get(name)
+    if category is None:
+        plugin_cls = _OUTPUT_REGISTRY.get_class(name)
+        try:
+            category = plugin_cls.category()
+        except Exception as exc:  # pragma: no cover - plugin misbehavior
+            msg = f"Unable to resolve output category for '{name}'"
+            raise RuntimeError(msg) from exc
+        _OUTPUT_PLUGIN_CATEGORIES[name] = category
+    return category is OutputGenerator.Category.JSON
 
 
 def _collect_global_parameter_defaults() -> dict[str, Any]:

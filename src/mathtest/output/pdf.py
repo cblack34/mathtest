@@ -172,6 +172,12 @@ class PdfOutputGenerator(OutputGenerator):
 
     _PLUGIN_NAME = "traditional-pdf"
 
+    @classmethod
+    def category(cls) -> OutputGenerator.Category:
+        """Return the output category advertised to the CLI."""
+
+        return OutputGenerator.Category.STANDARD
+
     def __init__(self, config: Mapping[str, Any] | None = None) -> None:
         """Validate configuration eagerly so errors surface before rendering."""
 

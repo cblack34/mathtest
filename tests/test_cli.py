@@ -1,15 +1,14 @@
 """End-to-end tests for the Typer CLI introduced in MVP Phase 5."""
 
+import importlib
 import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+import pytest
+import yaml
 from click.testing import Result
 from typer.testing import CliRunner
-import yaml
-import pytest
-
-import importlib
 
 main_module = importlib.import_module("mathtest.main")
 from mathtest.coordinator import (
@@ -18,14 +17,14 @@ from mathtest.coordinator import (
     ParameterSet,
     PluginRequest,
 )
-from mathtest.interface import ParameterDefinition, Problem
-from mathtest.output.pdf import PdfOutputGenerator
+from mathtest.interface import OutputGenerator, ParameterDefinition, Problem
 from mathtest.main import (
     _PLUGIN_PARAMETERS,
     _collect_global_parameter_defaults,
     _normalize_argv,
     app,
 )
+from mathtest.output.pdf import PdfOutputGenerator
 from mathtest.registry import OutputPluginRegistry
 
 
@@ -274,13 +273,17 @@ def test_cli_rejects_multiple_standard_output_plugins(
     pdf_path = tmp_path / "combo.pdf"
     recording_path = tmp_path / "recording.txt"
 
-    class _RecordingOutput:
+    class _RecordingOutput(OutputGenerator):
         """Simple output plugin that logs answers to a text file."""
 
         def __init__(self, config: Mapping[str, Any] | None = None) -> None:
             mapping = dict(config or {})
             raw_path = mapping.get("path", recording_path)
             self._path = Path(str(raw_path))
+
+        @classmethod
+        def category(cls) -> OutputGenerator.Category:
+            return OutputGenerator.Category.STANDARD
 
         @property
         def name(self) -> str:
@@ -371,13 +374,17 @@ def test_cli_allows_standard_and_json_output_plugins(
     pdf_path = tmp_path / "combo.pdf"
     json_path = tmp_path / "combo.json"
 
-    class _JsonOutput:
+    class _JsonOutput(OutputGenerator):
         """Output plugin that serializes problems to JSON."""
 
         def __init__(self, config: Mapping[str, Any] | None = None) -> None:
             mapping = dict(config or {})
             raw_path = mapping.get("path", json_path)
             self._path = Path(str(raw_path))
+
+        @classmethod
+        def category(cls) -> OutputGenerator.Category:
+            return OutputGenerator.Category.JSON
 
         @property
         def name(self) -> str:
@@ -412,6 +419,14 @@ def test_cli_allows_standard_and_json_output_plugins(
         {
             "traditional-pdf": list(PdfOutputGenerator.get_parameters()),
             "json": list(_JsonOutput.get_parameters()),
+        },
+    )
+    monkeypatch.setattr(
+        main_module,
+        "_OUTPUT_PLUGIN_CATEGORIES",
+        {
+            "traditional-pdf": OutputGenerator.Category.STANDARD,
+            "json": OutputGenerator.Category.JSON,
         },
     )
     monkeypatch.setattr(main_module, "_DEFAULT_OUTPUT_PLUGINS", ("traditional-pdf",))

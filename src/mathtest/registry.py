@@ -207,7 +207,7 @@ class OutputPluginRegistry:
             msg = f"Entry point '{plugin_name}' does not reference a class"
             raise OutputPluginRegistryError(msg)
 
-        required_attributes = ("get_parameters", "generate")
+        required_attributes = ("get_parameters", "generate", "category")
         for attribute in required_attributes:
             if not hasattr(plugin_obj, attribute):
                 msg = (

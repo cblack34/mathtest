@@ -3,6 +3,7 @@
 import pytest
 
 from mathtest import registry
+from mathtest.interface import OutputGenerator
 
 
 class _DummyPlugin:
@@ -36,11 +37,15 @@ class _EntryPoint:
         return self._plugin
 
 
-class _DummyOutput:
+class _DummyOutput(OutputGenerator):
     """Minimal output plugin for registry tests."""
 
     def __init__(self, config: dict[str, object] | None = None) -> None:
         self.config = dict(config or {})
+
+    @classmethod
+    def category(cls) -> OutputGenerator.Category:
+        return OutputGenerator.Category.STANDARD
 
     @property
     def name(self) -> str:
