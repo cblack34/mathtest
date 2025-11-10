@@ -222,7 +222,9 @@ class MultiplicationPlugin:
         """
 
         try:
-            self._config = _MultiplicationParams.model_validate(_normalize_param_keys(params))
+            self._config = _MultiplicationParams.model_validate(
+                _normalize_param_keys(params)
+            )
         except ValidationError as exc:  # pragma: no cover - defensive rewrap
             raise ValueError("Invalid multiplication plugin parameters") from exc
 

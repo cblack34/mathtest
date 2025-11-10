@@ -1,7 +1,5 @@
 """Tests for the PDF output implementation introduced in MVP Phase 4."""
 
-from __future__ import annotations
-
 import io
 from pathlib import Path
 
@@ -25,6 +23,7 @@ def _build_text_svg(
         "</svg>"
     )
 
+
 import pytest
 
 from reportlab.lib.pagesizes import letter
@@ -43,17 +42,28 @@ def sample_problems() -> list:
     return [plugin.generate_problem() for _ in range(3)]
 
 
+def test_pdf_output_declares_parameter_metadata() -> None:
+    """``get_parameters`` should expose CLI metadata for known options."""
+
+    definitions = {
+        definition.name: definition
+        for definition in PdfOutputGenerator.get_parameters()
+    }
+
+    assert "path" in definitions
+    assert definitions["path"].default == Path("worksheet.pdf")
+    assert definitions["include-answers"].type == bool
+
+
 def test_pdf_output_creates_file_with_answer_key(
     tmp_path: Path, sample_problems: list
 ) -> None:
     """PDF generator should produce a non-empty file when the key is enabled."""
 
     output_path = tmp_path / "worksheet.pdf"
-    generator = PdfOutputGenerator()
+    generator = PdfOutputGenerator({"path": output_path, "include-answers": True})
 
-    generator.generate(
-        sample_problems, {"path": output_path, "include_answers": True}
-    )
+    generator.generate(sample_problems)
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
@@ -71,9 +81,9 @@ def test_pdf_output_omits_answer_key_when_disabled(
     """Answer key content should be absent unless explicitly requested."""
 
     output_path = tmp_path / "worksheet.pdf"
-    generator = PdfOutputGenerator()
+    generator = PdfOutputGenerator({"path": output_path})
 
-    generator.generate(sample_problems, {"path": output_path})
+    generator.generate(sample_problems)
 
     assert output_path.exists()
     pdf_bytes = output_path.read_bytes()
@@ -86,24 +96,22 @@ def test_pdf_output_can_disable_student_header(
     """Student metadata fields should be optional via configuration."""
 
     output_path = tmp_path / "worksheet.pdf"
-    generator = PdfOutputGenerator()
-
-    generator.generate(
-        sample_problems,
-        {"path": output_path, "include_student_header": False},
+    generator = PdfOutputGenerator(
+        {"path": output_path, "include-student-header": False}
     )
+
+    generator.generate(sample_problems)
 
     pdf_bytes = output_path.read_bytes()
     assert b"Name:" not in pdf_bytes
     assert b"Date:" not in pdf_bytes
 
 
-def test_pdf_output_requires_path(sample_problems: list) -> None:
-    """Missing required parameters should raise a ``ValueError``."""
+def test_pdf_output_rejects_invalid_parameters() -> None:
+    """Invalid configuration should raise a ``ValueError`` during initialization."""
 
-    generator = PdfOutputGenerator()
     with pytest.raises(ValueError):
-        generator.generate(sample_problems, {})
+        PdfOutputGenerator({"columns": 0})
 
 
 def test_pdf_output_uses_svg2rlg_drawings(
@@ -113,7 +121,7 @@ def test_pdf_output_uses_svg2rlg_drawings(
 
     output_path = tmp_path / "worksheet.pdf"
     problem = Problem(svg=_build_text_svg(80, 40, "1 + 1"), data={"answer": 2})
-    generator = PdfOutputGenerator()
+    generator = PdfOutputGenerator({"path": output_path})
 
     class MockDrawing:
         def __init__(self) -> None:
@@ -137,7 +145,7 @@ def test_pdf_output_uses_svg2rlg_drawings(
     monkeypatch.setattr("mathtest.output.pdf.svg2rlg", fake_svg2rlg)
     monkeypatch.setattr("mathtest.output.pdf.renderPDF.draw", fake_render)
 
-    generator.generate([problem], {"path": output_path})
+    generator.generate([problem])
 
     assert output_path.exists()
     assert svg_inputs == [problem.svg]
@@ -177,8 +185,8 @@ def test_pdf_output_columns_layout(
     )
     problems.append(narrow_problem)
 
-    generator = PdfOutputGenerator()
     output_path = tmp_path / "columns.pdf"
+    generator = PdfOutputGenerator({"path": output_path})
 
     class MockDrawing:
         def __init__(self, width: float, height: float) -> None:
@@ -203,7 +211,7 @@ def test_pdf_output_columns_layout(
     monkeypatch.setattr("mathtest.output.pdf.svg2rlg", fake_svg2rlg)
     monkeypatch.setattr("mathtest.output.pdf.renderPDF.draw", fake_render)
 
-    generator.generate(problems, {"path": output_path})
+    generator.generate(problems)
 
     assert output_path.exists()
     assert matrices
@@ -229,7 +237,7 @@ def test_pdf_output_columns_layout(
         index: [] for index in range(config.columns)
     }
 
-    placements: list[dict[str, float]] = []
+    placements: list[dict[str, float | int]] = []
     for index, (matrix, drawing) in enumerate(zip(matrices, drawings)):
         scale_x, _, _, scale_y, tx, ty = matrix
         width = drawing.width * scale_x
@@ -317,12 +325,10 @@ def test_pdf_output_columns_layout(
     assert narrow_placements, "Expected at least one narrow problem for scaling test"
     for placement in narrow_placements:
         assert abs(placement["width"] - column_width) < tolerance
-        column_index = placement["column_index"]
+        column_index = int(placement["column_index"])
         assert (
             abs(
-                placement["x"]
-                + placement["width"]
-                - expected_right_edges[column_index]
+                placement["x"] + placement["width"] - expected_right_edges[column_index]
             )
             < tolerance
         )

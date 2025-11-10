@@ -237,9 +237,7 @@ class Coordinator:
             if seed_value is None:
                 deterministic_shuffle = False
             else:
-                shuffle_components.append(
-                    f"{plugin_request.name}:{seed_value}"
-                )
+                shuffle_components.append(f"{plugin_request.name}:{seed_value}")
 
         if not generation_plan:
             return GenerationResult(problems=problems, serialized=serialized)
@@ -320,9 +318,7 @@ class Coordinator:
         return None
 
     @staticmethod
-    def _derive_shuffle_seed(
-        components: list[str], plan: list[str]
-    ) -> int:
+    def _derive_shuffle_seed(components: list[str], plan: list[str]) -> int:
         """Create a deterministic shuffle seed from plugin seeds and plan."""
 
         payload = {"components": components, "plan": plan}

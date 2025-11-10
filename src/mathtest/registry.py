@@ -6,12 +6,10 @@ point group declared in :mod:`pyproject.toml` so new problem generators can be
 added without modifying the coordinator.
 """
 
-from __future__ import annotations
-
 from importlib import metadata
 from typing import Any, Mapping
 
-from .interface import MathProblemPlugin
+from .interface import MathProblemPlugin, OutputGenerator
 
 
 class PluginRegistryError(RuntimeError):
@@ -132,5 +130,90 @@ class PluginRegistry:
             if not hasattr(plugin_obj, attribute):
                 msg = f"Plugin '{plugin_name}' missing required attribute '{attribute}'"
                 raise PluginRegistryError(msg)
+
+        return plugin_obj
+
+
+class OutputPluginRegistryError(RuntimeError):
+    """Raised when output plugin discovery or instantiation fails."""
+
+
+class OutputPluginRegistry:
+    """Discover and cache output generators declared via entry points."""
+
+    def __init__(
+        self,
+        *,
+        entry_point_group: str = "mathtest.output_plugins",
+        plugins: Mapping[str, type[OutputGenerator]] | None = None,
+    ) -> None:
+        self._entry_point_group = entry_point_group
+        self._plugins: dict[str, type[OutputGenerator]] = (
+            dict(plugins) if plugins is not None else self._load_from_entry_points()
+        )
+
+    def names(self) -> tuple[str, ...]:
+        """Return the registered output plugin names sorted alphabetically."""
+
+        return tuple(sorted(self._plugins))
+
+    def get_class(self, plugin_name: str) -> type[OutputGenerator]:
+        """Return the output plugin class associated with ``plugin_name``."""
+
+        try:
+            return self._plugins[plugin_name]
+        except KeyError as exc:  # pragma: no cover - defensive rewrap
+            msg = f"Unknown output plugin '{plugin_name}'"
+            raise OutputPluginRegistryError(msg) from exc
+
+    def create(
+        self, plugin_name: str, config: Mapping[str, Any] | None = None
+    ) -> OutputGenerator:
+        """Instantiate an output plugin with optional configuration."""
+
+        plugin_cls = self.get_class(plugin_name)
+        try:
+            instance = plugin_cls(config)
+        except Exception as exc:  # pragma: no cover - defensive rewrap
+            msg = f"Failed to instantiate output plugin '{plugin_name}'"
+            raise OutputPluginRegistryError(msg) from exc
+
+        if not isinstance(instance, OutputGenerator):
+            msg = f"Plugin '{plugin_name}' does not implement the OutputGenerator interface"
+            raise OutputPluginRegistryError(msg)
+
+        return instance
+
+    def _load_from_entry_points(self) -> dict[str, type[OutputGenerator]]:
+        """Load output plugin classes registered under the configured entry point."""
+
+        discovered: dict[str, type[OutputGenerator]] = {}
+        for entry_point in metadata.entry_points(group=self._entry_point_group):
+            plugin_name = entry_point.name
+            if plugin_name in discovered:
+                msg = f"Duplicate output plugin name '{plugin_name}' discovered in entry points"
+                raise OutputPluginRegistryError(msg)
+            plugin_obj = entry_point.load()
+            plugin_cls = self._validate_plugin(plugin_name, plugin_obj)
+            discovered[plugin_name] = plugin_cls
+        return discovered
+
+    def _validate_plugin(
+        self, plugin_name: str, plugin_obj: Any
+    ) -> type[OutputGenerator]:
+        """Ensure ``plugin_obj`` behaves like an output plugin implementation."""
+
+        if not isinstance(plugin_obj, type):
+            msg = f"Entry point '{plugin_name}' does not reference a class"
+            raise OutputPluginRegistryError(msg)
+
+        required_attributes = ("get_parameters", "generate", "category")
+        for attribute in required_attributes:
+            if not hasattr(plugin_obj, attribute):
+                msg = (
+                    f"Output plugin '{plugin_name}' missing required attribute "
+                    f"'{attribute}'"
+                )
+                raise OutputPluginRegistryError(msg)
 
         return plugin_obj

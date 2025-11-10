@@ -1,10 +1,9 @@
 """Tests for the :mod:`mathtest.registry` module."""
 
-from __future__ import annotations
-
 import pytest
 
 from mathtest import registry
+from mathtest.interface import OutputGenerator
 
 
 class _DummyPlugin:
@@ -38,6 +37,28 @@ class _EntryPoint:
         return self._plugin
 
 
+class _DummyOutput(OutputGenerator):
+    """Minimal output plugin for registry tests."""
+
+    def __init__(self, config: dict[str, object] | None = None) -> None:
+        self.config = dict(config or {})
+
+    @classmethod
+    def category(cls) -> OutputGenerator.Category:
+        return OutputGenerator.Category.STANDARD
+
+    @property
+    def name(self) -> str:
+        return "dummy-output"
+
+    @classmethod
+    def get_parameters(cls):  # type: ignore[override]
+        return ()
+
+    def generate(self, problems):  # pragma: no cover - not required for tests
+        raise NotImplementedError
+
+
 def test_registry_rejects_duplicate_entry_point_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -56,3 +77,25 @@ def test_registry_rejects_duplicate_entry_point_names(
         registry.PluginRegistry()
 
     assert "Duplicate plugin name" in str(excinfo.value)
+
+
+def test_output_registry_instantiates_plugins() -> None:
+    """Output registries should instantiate configured plugin classes."""
+
+    output_registry = registry.OutputPluginRegistry(
+        plugins={"dummy-output": _DummyOutput}
+    )
+
+    plugin = output_registry.create("dummy-output", {"path": "unused"})
+
+    assert isinstance(plugin, _DummyOutput)
+    assert plugin.config["path"] == "unused"
+
+
+def test_output_registry_rejects_unknown_names() -> None:
+    """Accessing an unknown output plugin should raise an error."""
+
+    output_registry = registry.OutputPluginRegistry(plugins={})
+
+    with pytest.raises(registry.OutputPluginRegistryError):
+        output_registry.create("missing")

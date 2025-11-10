@@ -7,8 +7,6 @@ addition and subtraction plugins shipped in the MVP while keeping the code
 extensible for future problem types.
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 import io
 from pathlib import Path
@@ -22,7 +20,17 @@ from reportlab.graphics import renderPDF  # type: ignore[import-untyped]
 from reportlab.graphics.shapes import Drawing  # type: ignore[import-untyped]
 from svglib.svglib import svg2rlg  # type: ignore[import-untyped]
 
-from ..interface import OutputGenerator, Problem
+from ..interface import OutputGenerator, ParameterDefinition, Problem
+
+
+def _normalize_param_keys(params: Mapping[str, Any]) -> dict[str, Any]:
+    """Return ``params`` with CLI-friendly keys normalized to snake_case."""
+
+    normalized: dict[str, Any] = {}
+    for key, value in params.items():
+        normalized[key.replace("-", "_")] = value
+    return normalized
+
 
 MIN_HEADER_LABEL_FONT_SIZE = 10.0
 HEADER_LABEL_PADDING_FACTOR = 0.5
@@ -31,15 +39,6 @@ NAME_FIELD_WIDTH_RATIO = 0.5
 DATE_FIELD_WIDTH_RATIO = 0.35
 HEADER_SPACING_MULTIPLIER = 1.6
 FLOAT_TOLERANCE = 1e-9
-
-
-def _normalize_param_keys(params: Mapping[str, Any] | None) -> dict[str, Any]:
-    """Return ``params`` with CLI-friendly keys normalized to snake_case."""
-
-    normalized: dict[str, Any] = {}
-    for key, value in (params or {}).items():
-        normalized[key.replace("-", "_")] = value
-    return normalized
 
 
 @dataclass
@@ -84,7 +83,10 @@ class PdfOutputParams(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    path: Path = Field(..., description="Destination PDF file path.")
+    path: Path = Field(
+        default=Path("worksheet.pdf"),
+        description="Destination PDF file path.",
+    )
     title: str = Field(
         default="Test",
         description="Optional document title rendered on the first page.",
@@ -168,22 +170,126 @@ class PdfOutputParams(BaseModel):
 class PdfOutputGenerator(OutputGenerator):
     """Render problems into a PDF document using ReportLab (MVP Phase 4)."""
 
-    def generate(self, problems: Sequence[Problem], params: Mapping[str, Any]) -> None:
+    _PLUGIN_NAME = "traditional-pdf"
+
+    @classmethod
+    def category(cls) -> OutputGenerator.Category:
+        """Return the output category advertised to the CLI."""
+
+        return OutputGenerator.Category.STANDARD
+
+    def __init__(self, config: Mapping[str, Any] | None = None) -> None:
+        """Validate configuration eagerly so errors surface before rendering."""
+
+        merged = _normalize_param_keys(dict(config or {}))
+        try:
+            self._config = PdfOutputParams.model_validate(merged)
+        except ValidationError as exc:  # pragma: no cover - defensive branch
+            raise ValueError("Invalid PDF output parameters") from exc
+
+    @property
+    def name(self) -> str:
+        """Return the identifier advertised via entry points."""
+
+        return self._PLUGIN_NAME
+
+    @classmethod
+    def get_parameters(cls) -> Sequence[ParameterDefinition]:
+        """Expose configuration metadata consumed by the CLI and config files."""
+
+        return (
+            ParameterDefinition(
+                name="path",
+                default=Path("worksheet.pdf"),
+                description="Destination PDF file path.",
+                type="path",
+            ),
+            ParameterDefinition(
+                name="title",
+                default="Test",
+                description="Optional document title rendered on the first page.",
+                type=str,
+            ),
+            ParameterDefinition(
+                name="margin-inches",
+                default=0.75,
+                description="Page margin applied to all sides in inches.",
+                type=float,
+            ),
+            ParameterDefinition(
+                name="problem-spacing-inches",
+                default=0.35,
+                description="Vertical spacing between problems in inches.",
+                type=float,
+            ),
+            ParameterDefinition(
+                name="answers-on-new-page",
+                default=True,
+                description="Whether the answer key should start on a new page.",
+                type=bool,
+            ),
+            ParameterDefinition(
+                name="include-answers",
+                default=False,
+                description="Toggle rendering of the answer key section.",
+                type=bool,
+            ),
+            ParameterDefinition(
+                name="answer-title",
+                default="Answer Key",
+                description="Heading rendered before the answer list.",
+                type=str,
+            ),
+            ParameterDefinition(
+                name="body-font",
+                default="Helvetica",
+                description="Base font used for ancillary text.",
+                type=str,
+            ),
+            ParameterDefinition(
+                name="include-student-header",
+                default=True,
+                description="Include student metadata fields beneath the title.",
+                type=bool,
+            ),
+            ParameterDefinition(
+                name="title-font-size",
+                default=20,
+                description="Font size used for the main title.",
+                type=int,
+            ),
+            ParameterDefinition(
+                name="answer-font-size",
+                default=12,
+                description="Font size used for the answer key entries.",
+                type=int,
+            ),
+            ParameterDefinition(
+                name="columns",
+                default=4,
+                description="Number of problem columns rendered per page.",
+                type=int,
+            ),
+            ParameterDefinition(
+                name="column-spacing-inches",
+                default=0.25,
+                description="Horizontal spacing between columns in inches.",
+                type=float,
+            ),
+        )
+
+    def generate(self, problems: Sequence[Problem]) -> None:
         """Generate a PDF worksheet from ``problems``.
 
         Args:
             problems: Ordered problems generated by the coordinator.
-            params: Configuration dictionary containing at least ``path``.
 
         Raises:
-            ValueError: If ``params`` fails validation or the SVG markup cannot be
-                interpreted.
+            ValueError: If configuration validation fails or the SVG markup cannot
+                be interpreted.
         """
 
-        try:
-            config = PdfOutputParams.model_validate(_normalize_param_keys(params))
-        except ValidationError as exc:  # pragma: no cover - defensive branch
-            raise ValueError("Invalid PDF output parameters") from exc
+        config = self._config
 
         if not problems:
             msg = "At least one problem is required to build a worksheet"
@@ -214,23 +320,26 @@ class PdfOutputGenerator(OutputGenerator):
         answers: list[str] = []
         prepared_problems: list[_PreparedProblem] = []
         for problem in problems:
-            drawing = svg2rlg(io.StringIO(problem.svg))
-            if drawing.width is None or drawing.height is None:
+            drawing_obj = svg2rlg(io.StringIO(problem.svg))  # type: ignore[arg-type]
+            if drawing_obj is None:
+                msg = "Unable to parse problem SVG into a drawing"
+                raise ValueError(msg)
+            if drawing_obj.width is None or drawing_obj.height is None:
                 msg = "Problem SVG must provide explicit width and height"
                 raise ValueError(msg)
-            if drawing.width <= 0 or drawing.height <= 0:
+            if drawing_obj.width <= 0 or drawing_obj.height <= 0:
                 msg = "Problem SVG dimensions must be positive"
                 raise ValueError(msg)
 
-            scale = column_width / float(drawing.width)
-            scaled_height = float(drawing.height) * scale
+            scale = column_width / float(drawing_obj.width)
+            scaled_height = float(drawing_obj.height) * scale
             prepared_problems.append(
                 _PreparedProblem(
                     problem=problem,
-                    drawing=drawing,
+                    drawing=drawing_obj,
                     scale=scale,
                     scaled_height=scaled_height,
-                    scaled_width=drawing.width * scale,
+                    scaled_width=drawing_obj.width * scale,
                 )
             )
 
@@ -243,9 +352,7 @@ class PdfOutputGenerator(OutputGenerator):
         pages: list[_PageLayout] = []
         current_page_rows: list[_RowLayout] = []
         current_row_top = page_initial_top
-        current_row = _RowLayout(
-            top=current_row_top, height=0.0, placements=[]
-        )
+        current_row = _RowLayout(top=current_row_top, height=0.0, placements=[])
         current_row_height = 0.0
         current_column = 0
 
@@ -256,9 +363,7 @@ class PdfOutputGenerator(OutputGenerator):
                 current_row.height = row_height
                 current_page_rows.append(current_row)
                 current_row_top -= row_height + config.problem_spacing
-            current_row = _RowLayout(
-                top=current_row_top, height=0.0, placements=[]
-            )
+            current_row = _RowLayout(top=current_row_top, height=0.0, placements=[])
             current_row_height = 0.0
             current_column = 0
 
@@ -271,9 +376,7 @@ class PdfOutputGenerator(OutputGenerator):
                 pages.append(_PageLayout(rows=current_page_rows))
             current_page_rows = []
             current_row_top = page_initial_top
-            current_row = _RowLayout(
-                top=current_row_top, height=0.0, placements=[]
-            )
+            current_row = _RowLayout(top=current_row_top, height=0.0, placements=[])
             current_row_height = 0.0
             current_column = 0
 
@@ -468,4 +571,3 @@ class PdfOutputGenerator(OutputGenerator):
                 canvas.setFont(config.body_font, config.answer_font_size)
             canvas.drawString(config.margin, current_y, f"{index}. {answer}")
             current_y -= line_height
-
